@@ -136,9 +136,14 @@ export default async function MoviePage({ params }: Props) {
                                 ))}
                             </div>
                         </div>
+                        <div className="space-y-4 pt-4 border-t border-white/10">
+                            <MovieReviews id={movie.id} title={movie.title} />
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     );
 }
+
+import { MovieReviews } from "@/components/movie-reviews";
