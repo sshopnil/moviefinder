@@ -1,6 +1,6 @@
 
 import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
-import { MovieGrid } from "@/components/movie-grid";
+import { ActorCreditsBrowser } from "@/components/actor-credits-browser";
 import { ArrowLeft, MapPin, Calendar, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -76,9 +76,8 @@ export default async function PersonPage({ params }: Props) {
                         </div>
                     </div>
 
-                    <div className="space-y-6">
-                        <h2 className="text-2xl font-bold text-white">Known For</h2>
-                        <MovieGrid movies={credits} title="" />
+                    <div className="mt-8">
+                        <ActorCreditsBrowser credits={credits} />
                     </div>
                 </div>
             </div>

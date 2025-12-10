@@ -109,6 +109,6 @@ export const movieService = {
     getPersonCredits: async (id: number): Promise<Movie[]> => {
         const data = await fetchFromTMDB<{ cast: Movie[] }>(`/person/${id}/movie_credits`);
         // Sort by popularity or vote count to show best movies first
-        return data.cast.sort((a, b) => b.popularity - a.popularity).slice(0, 20);
+        return data.cast.sort((a, b) => b.popularity - a.popularity);
     }
 };
