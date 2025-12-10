@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.45",
+    "@radix-ui/react-dialog": "^1.1.15",
     "ai": "^5.0.108",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
+    "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.556.0",
     "mongoose": "^9.0.1",

@@ -1,27 +1,52 @@
+
 import { Suspense } from "react";
-import { movieService } from "@/lib/tmdb";
+import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { getRecommendationsFromMood } from "@/lib/ai";
 import { MovieGrid } from "@/components/movie-grid";
 import { Loader2 } from "lucide-react";
 import { Movie } from "@/types/movie";
 import { ClientHeader } from "@/components/client-header";
-import { AuthHeader } from "@/components/auth-header";
+
+import { SearchFilters } from "@/components/search-filters";
+import Link from "next/link";
+import Image from "next/image";
 
 // Server Component
 export default async function Home(props: {
-  searchParams: Promise<{ q?: string; mood?: string }>;
+  searchParams: Promise<{ [key: string]: string | undefined }>;
 }) {
   const searchParams = await props.searchParams;
-  const { q: query, mood } = searchParams;
+  const query = searchParams.q;
+  const mood = searchParams.mood;
+
+  // Filters
+  const with_genres = searchParams.with_genres;
+  const primary_release_year = searchParams.primary_release_year;
+  const vote_average_gte = searchParams["vote_average.gte"];
 
   let movies: Movie[] = [];
+  let people: any[] = [];
   let viewTitle = "Trending Now";
 
   // Data Fetching logic on the server
+  // Priority: Query (Multi) > Filters (Discover) > Mood (AI) > Trending
   if (query) {
     viewTitle = `Results for "${query}"`;
     try {
-      movies = await movieService.searchMovies(query);
+      const results = await movieService.searchMulti(query);
+      movies = results.movies;
+      people = results.people;
+    } catch (e) {
+      console.error(e);
+    }
+  } else if (with_genres || primary_release_year || vote_average_gte) {
+    viewTitle = "Filtered Results";
+    try {
+      movies = await movieService.getDiscover({
+        with_genres,
+        primary_release_year,
+        "vote_average.gte": vote_average_gte
+      });
     } catch (e) {
       console.error(e);
     }
@@ -60,7 +85,7 @@ export default async function Home(props: {
           MovieFinder
         </h1>
         <p className="text-gray-400 max-w-lg">
-          Discover movies through search or describe your mood to our AI.
+          Discover movies through search, filters, or describe your mood.
         </p>
 
         <div className="w-full max-w-4xl flex flex-col gap-4 items-center z-10">
@@ -69,15 +94,45 @@ export default async function Home(props: {
         </div>
       </header>
 
-      <AuthHeader />
+      <div className="flex flex-col gap-4">
+        <SearchFilters />
 
-      <Suspense fallback={
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-10 w-10 text-white animate-spin" />
-        </div>
-      }>
-        <MovieGrid movies={movies} title={viewTitle} />
-      </Suspense>
+        {/* People Results */}
+        {people.length > 0 && (
+          <div className="mb-8 animate-in fade-in slide-in-from-bottom-4">
+            <h2 className="text-2xl font-bold text-white mb-6 pl-2 border-l-4 border-blue-500">People</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {people.map((person) => (
+                <Link key={person.id} href={`/person/${person.id}`} className="group block bg-white/5 rounded-xl p-3 hover:bg-white/10 transition-colors">
+                  <div className="relative aspect-square rounded-full overflow-hidden mb-3 mx-auto max-w-[120px] bg-black/20 group-hover:ring-2 ring-blue-500/50 transition-all">
+                    {person.profile_path ? (
+                      <Image
+                        src={TMDB_IMAGE_URL.profile(person.profile_path)}
+                        alt={person.name}
+                        fill
+                        className="object-cover group-hover:scale-110 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-gray-500 text-xs">No Image</div>
+                    )}
+                  </div>
+                  <p className="text-center text-sm font-semibold text-white group-hover:text-blue-400 transition-colors truncate">{person.name}</p>
+                  <p className="text-center text-xs text-gray-400 truncate">{person.known_for_department}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Movies Grid */}
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-64">
+            <Loader2 className="h-10 w-10 text-white animate-spin" />
+          </div>
+        }>
+          <MovieGrid movies={movies} title={viewTitle} />
+        </Suspense>
+      </div>
     </main>
   );
 }

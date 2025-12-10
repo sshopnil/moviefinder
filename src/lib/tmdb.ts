@@ -51,6 +51,16 @@ export const movieService = {
         return data.results;
     },
 
+    searchMulti: async (query: string): Promise<{ movies: Movie[], people: any[] }> => {
+        if (!query) return { movies: [], people: [] };
+        const data = await fetchFromTMDB<{ results: any[] }>("/search/multi", { query });
+
+        const movies = data.results.filter((item: any) => item.media_type === "movie") as Movie[];
+        const people = data.results.filter((item: any) => item.media_type === "person");
+
+        return { movies, people };
+    },
+
     searchMovies: async (query: string): Promise<Movie[]> => {
         if (!query) return [];
         const data = await fetchFromTMDB<MovieResponse>("/search/movie", { query });
@@ -66,10 +76,36 @@ export const movieService = {
         return { ...data, cast };
     },
 
-    getDiscover: async (with_genres?: string): Promise<Movie[]> => {
-        const params: Record<string, string> = {};
-        if (with_genres) params.with_genres = with_genres;
+    getDiscover: async (filters: {
+        with_genres?: string;
+        primary_release_year?: string;
+        "vote_average.gte"?: string;
+        with_runtime_gte?: string;
+        with_runtime_lte?: string;
+    }): Promise<Movie[]> => {
+        // Remove undefined keys
+        const params = Object.fromEntries(
+            Object.entries(filters).filter(([_, v]) => v != null && v !== "")
+        ) as Record<string, string>;
+
         const data = await fetchFromTMDB<MovieResponse>("/discover/movie", params);
         return data.results;
+    },
+
+    getMovieImages: async (id: number): Promise<{ backdrops: any[]; posters: any[] }> => {
+        const data = await fetchFromTMDB<{ backdrops: any[]; posters: any[] }>(`/movie/${id}/images`, {
+            include_image_language: "en,null",
+        });
+        return data;
+    },
+
+    getPersonDetails: async (id: number): Promise<any> => {
+        return fetchFromTMDB<any>(`/person/${id}`);
+    },
+
+    getPersonCredits: async (id: number): Promise<Movie[]> => {
+        const data = await fetchFromTMDB<{ cast: Movie[] }>(`/person/${id}/movie_credits`);
+        // Sort by popularity or vote count to show best movies first
+        return data.cast.sort((a, b) => b.popularity - a.popularity).slice(0, 20);
     }
 };

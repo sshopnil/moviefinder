@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MovieActions } from "@/components/movie-actions";
 import { getWatchlistStatusAction } from "@/actions/watchlist";
+import { MediaGallery } from "@/components/media-gallery";
 
 // Use generic 'params' type handling available in newer Next.js versions or simple awaitable
 type Props = {
@@ -18,10 +19,12 @@ export default async function MoviePage({ params }: Props) {
 
     let movie;
     let isSaved = false;
+    let images: { backdrops: any[]; posters: any[] } = { backdrops: [], posters: [] };
 
     try {
         movie = await movieService.getMovieDetails(parseInt(id));
         isSaved = await getWatchlistStatusAction(parseInt(id));
+        images = await movieService.getMovieImages(parseInt(id));
     } catch (e) {
         console.error(e);
         return notFound();
@@ -97,25 +100,29 @@ export default async function MoviePage({ params }: Props) {
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-white/10">
+                            <MediaGallery images={images} />
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-white/10">
                             <h3 className="text-lg font-semibold text-white">Top Cast</h3>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                                 {movie.cast.map((actor: any) => (
-                                    <div key={actor.id} className="text-center">
-                                        <div className="relative w-full aspect-square rounded-full overflow-hidden mb-2 mx-auto max-w-[100px] bg-white/5">
+                                    <Link key={actor.id} href={`/person/${actor.id}`} className="text-center group block">
+                                        <div className="relative w-full aspect-square rounded-full overflow-hidden mb-2 mx-auto max-w-[100px] bg-white/5 group-hover:ring-2 ring-white/20 transition-all">
                                             {actor.profile_path ? (
                                                 <Image
                                                     src={TMDB_IMAGE_URL.profile(actor.profile_path)}
                                                     alt={actor.name}
                                                     fill
-                                                    className="object-cover"
+                                                    className="object-cover group-hover:scale-110 transition-transform"
                                                 />
                                             ) : (
                                                 <div className="flex items-center justify-center h-full text-xs text-gray-500">No Image</div>
                                             )}
                                         </div>
-                                        <p className="text-sm font-medium text-white truncate">{actor.name}</p>
+                                        <p className="text-sm font-medium text-white truncate group-hover:text-blue-400 transition-colors">{actor.name}</p>
                                         <p className="text-xs text-gray-400 truncate">{actor.character}</p>
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
                         </div>
