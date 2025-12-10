@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { Movie } from "@/types/movie";
 import { getTrendingMoviesAction, searchMoviesAction, getRecommendationsAction } from "./actions";
 import { MovieCard } from "@/components/movie-card";
@@ -8,15 +8,28 @@ import { SearchBar } from "@/components/search-bar";
 import { MoodSelector } from "@/components/mood-selector";
 import { Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function Home() {
+function HomeContent() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewTitle, setViewTitle] = useState("Trending Now");
 
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   useEffect(() => {
-    loadTrending();
-  }, []);
+    const query = searchParams.get("q");
+    const mood = searchParams.get("mood");
+
+    if (query) {
+      loadSearch(query);
+    } else if (mood) {
+      loadMood(mood);
+    } else {
+      loadTrending();
+    }
+  }, [searchParams]);
 
   const loadTrending = async () => {
     setIsLoading(true);
@@ -31,13 +44,12 @@ export default function Home() {
     }
   };
 
-  const handleSearch = async (query: string) => {
-    if (!query.trim()) return;
+  const loadSearch = async (query: string) => {
     setIsLoading(true);
+    setViewTitle(`Results for "${query}"`);
     try {
       const results = await searchMoviesAction(query);
       setMovies(results);
-      setViewTitle(`Results for "${query}"`);
     } catch (error) {
       console.error("Search failed:", error);
     } finally {
@@ -45,7 +57,7 @@ export default function Home() {
     }
   };
 
-  const handleMoodSubmit = async (mood: string) => {
+  const loadMood = async (mood: string) => {
     setIsLoading(true);
     setViewTitle(`AI Recommendations for "${mood}"`);
     try {
@@ -56,6 +68,16 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSearch = (query: string) => {
+    if (!query.trim()) return;
+    router.push(`/?q=${encodeURIComponent(query)}`);
+  };
+
+  const handleMoodSubmit = (mood: string) => {
+    if (!mood.trim()) return;
+    router.push(`/?mood=${encodeURIComponent(mood)}`);
   };
 
   return (
@@ -79,7 +101,6 @@ export default function Home() {
       <section className="flex-1 mt-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold text-white/90">{viewTitle}</h2>
-          {/* Add Filter/Sort UI here potentially */}
         </div>
 
         {isLoading ? (
@@ -114,5 +135,13 @@ export default function Home() {
         )}
       </section>
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-white">Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   );
 }

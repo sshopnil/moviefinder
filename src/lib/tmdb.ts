@@ -1,4 +1,4 @@
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
+// const TMDB_API_KEY = process.env.TMDB_API_KEY; // Moved inside function for runtime safety
 const BASE_URL = "https://api.themoviedb.org/3";
 const IMAGE_BASE_URL = "https://image.tmdb.org/t/p";
 
@@ -11,7 +11,8 @@ export const TMDB_IMAGE_URL = {
 };
 
 async function fetchFromTMDB<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
-    if (!TMDB_API_KEY) {
+    const apiKey = process.env.TMDB_API_KEY;
+    if (!apiKey) {
         console.warn("TMDB_API_KEY is missing. Returning mock data or empty results.");
         // In a real scenario, we might want to throw an error or handle this gracefully.
         // For now, let's assume the user will provide the key.
@@ -19,7 +20,7 @@ async function fetchFromTMDB<T>(endpoint: string, params: Record<string, string>
     }
 
     const queryParams = new URLSearchParams({
-        api_key: TMDB_API_KEY || "",
+        api_key: apiKey || "",
         language: "en-US",
         ...params,
     });

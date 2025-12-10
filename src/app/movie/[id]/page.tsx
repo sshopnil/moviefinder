@@ -3,6 +3,7 @@ import { ArrowLeft, Calendar, Clock, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { MovieActions } from "@/components/movie-actions";
 
 // Use generic 'params' type handling available in newer Next.js versions or simple awaitable
 type Props = {
@@ -56,11 +57,14 @@ export default async function MoviePage({ params }: Props) {
                     </div>
 
                     {/* Details */}
+                    {/* Details */}
                     <div className="space-y-6">
                         <div>
                             <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">{movie.title}</h1>
                             <p className="text-xl text-gray-400 italic">{movie.tagline}</p>
                         </div>
+
+                        <MovieActions trailerKey={movie.videos?.results?.find(v => v.type === "Trailer" && v.site === "YouTube")?.key} />
 
                         <div className="flex flex-wrap gap-4 text-sm text-gray-300">
                             <div className="flex items-center gap-1 bg-white/5 px-3 py-1 rounded-full">
@@ -116,6 +120,7 @@ export default async function MoviePage({ params }: Props) {
                     </div>
                 </div>
             </div>
+
         </div>
     );
 }
