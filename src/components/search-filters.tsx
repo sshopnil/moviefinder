@@ -33,6 +33,11 @@ const LANGUAGES = [
     { code: "fr", name: "French" },
     { code: "es", name: "Spanish" },
     { code: "hi", name: "Hindi" },
+    { code: "bn", name: "Bengali" },
+    { code: "ta", name: "Tamil" },
+    { code: "te", name: "Telugu" },
+    { code: "ml", name: "Malayalam" },
+    { code: "kn", name: "Kannada" },
     { code: "zh", name: "Chinese" },
 ];
 

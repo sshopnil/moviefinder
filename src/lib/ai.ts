@@ -17,10 +17,15 @@ export async function getRecommendationsFromMood(mood: string) {
     try {
         const { text } = await generateText({
             model: groq("llama-3.3-70b-versatile"),
-            prompt: `Suggest 5 movies for a user who is feeling: "${mood}". 
-      Focus on a mix of hidden gems and classics. 
-      Return ONLY a raw JSON object (no markdown formatting) with a single key "movies" containing an array of 5 string titles.
-      Example usage: { "movies": ["Movie 1", "Movie 2"] }`,
+            prompt: `Suggest 20 movies for a user who is feeling: "${mood}". 
+      Focus on a mix of hidden gems, classics, and masterpieces from all over the world.
+      
+      CRITICAL INSTRUCTIONS:
+      1. Return ONLY a JSON array of strings (titles) inside a "movies" key. No other text.
+      2. ACTIVELY INCLUDE movies from India (Bollywood, Tollywood, Kollywood - e.g. Bengali, Tamil, Telugu, Hindi, Malayalam), Korea, Japan, Europe, etc.
+      3. Do NOT limit to English or Hollywood.
+      
+      Example usage: { "movies": ["Pather Panchali", "Parasite", "Super Deluxe", "The Godfather", "Mahanagar", ... 15 more] }`,
             maxRetries: 1,
         });
 
