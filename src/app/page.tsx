@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Movie } from "@/types/movie";
-import { movieService } from "@/lib/tmdb";
-import { getRecommendationsFromMood } from "@/lib/ai";
+import { getTrendingMoviesAction, searchMoviesAction, getRecommendationsAction } from "./actions";
 import { MovieCard } from "@/components/movie-card";
 import { SearchBar } from "@/components/search-bar";
 import { MoodSelector } from "@/components/mood-selector";
@@ -22,7 +21,7 @@ export default function Home() {
   const loadTrending = async () => {
     setIsLoading(true);
     try {
-      const data = await movieService.getTrending();
+      const data = await getTrendingMoviesAction();
       setMovies(data);
       setViewTitle("Trending Now");
     } catch (error) {
@@ -36,7 +35,7 @@ export default function Home() {
     if (!query.trim()) return;
     setIsLoading(true);
     try {
-      const results = await movieService.searchMovies(query);
+      const results = await searchMoviesAction(query);
       setMovies(results);
       setViewTitle(`Results for "${query}"`);
     } catch (error) {
@@ -50,21 +49,7 @@ export default function Home() {
     setIsLoading(true);
     setViewTitle(`AI Recommendations for "${mood}"`);
     try {
-      // 1. Get titles from AI
-      const titles = await getRecommendationsFromMood(mood);
-
-      if (titles.length === 0) {
-        setMovies([]); // Or keep previous?
-        return;
-      }
-
-      // 2. Fetch movie data for each title
-      const moviePromises = titles.map(async (title) => {
-        const results = await movieService.searchMovies(title);
-        return results[0]; // Take the best match
-      });
-
-      const recommendedMovies = (await Promise.all(moviePromises)).filter(Boolean);
+      const recommendedMovies = await getRecommendationsAction(mood);
       setMovies(recommendedMovies);
     } catch (error) {
       console.error("Mood search failed:", error);
@@ -106,7 +91,7 @@ export default function Home() {
             layout
             className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6"
           >
-            <AnimatePresence>
+            <AnimatePresence mode="popLayout">
               {movies.map((movie) => (
                 <motion.div
                   key={movie.id}
