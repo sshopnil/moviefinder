@@ -6,13 +6,17 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import Link from "next/link";
+
 interface MovieSectionProps {
     title: string;
     description?: string;
     movies: Movie[];
+    viewAllLink?: string;
+    totalCount?: number;
 }
 
-export function MovieSection({ title, description, movies }: MovieSectionProps) {
+export function MovieSection({ title, description, movies, viewAllLink, totalCount }: MovieSectionProps) {
     const [isExpanded, setIsExpanded] = useState(false);
 
     // Config: Initial rows to show (2 rows of 4-5 items = 10 items)
@@ -31,6 +35,12 @@ export function MovieSection({ title, description, movies }: MovieSectionProps) 
                     </h2>
                     {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
                 </div>
+                {viewAllLink && (
+                    <Link href={viewAllLink} className="text-sm text-blue-400 hover:text-blue-300 transition-colors mb-1">
+                        View All
+                        {totalCount ? ` (${totalCount})` : " >"}
+                    </Link>
+                )}
             </div>
 
             <motion.div layout className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">

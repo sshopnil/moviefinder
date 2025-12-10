@@ -33,7 +33,13 @@ export default async function Home(props: {
   let isSearchOrFilter = false;
 
   // Regional/Category Data (only fetched if default home view)
-  let homeSections: { title: string; movies: Movie[]; description?: string }[] = [];
+  let homeSections: {
+    title: string;
+    movies: Movie[];
+    description?: string;
+    viewAllLink?: string;
+    totalCount?: number;
+  }[] = [];
 
   // Data Fetching logic on the server
   // Priority: Query (Multi) > Filters (Discover) > Mood (AI) > Default Home (Sections)
@@ -44,6 +50,25 @@ export default async function Home(props: {
       const results = await movieService.searchMulti(query);
       movies = results.movies;
       people = results.people;
+
+      // Apply in-memory filters to search results
+      if (with_genres) {
+        const genreId = parseInt(with_genres);
+        movies = movies.filter(m => m.genre_ids?.includes(genreId));
+      }
+      if (primary_release_year) {
+        movies = movies.filter(m => m.release_date?.startsWith(primary_release_year));
+      }
+      if (vote_average_gte) {
+        movies = movies.filter(m => m.vote_average >= parseFloat(vote_average_gte));
+      }
+      if (with_original_language) {
+        movies = movies.filter(m => m.original_language === with_original_language);
+      }
+      // Note: Region filtering for search results is less reliable as TMDB search results
+      // might not have all release dates for all regions attached in the list view.
+      // We'll skip region filter strict enforcement for search results to avoid over-filtering.
+
     } catch (e) {
       console.error(e);
     }
@@ -93,11 +118,41 @@ export default async function Home(props: {
       ]);
 
       homeSections = [
-        { title: "Trending Now", movies: trending, description: "Most popular movies this week" },
-        { title: "Hollywood Hits", movies: english, description: "Popular English language movies" },
-        { title: "Best of Korea", movies: korean, description: "Top picks from South Korean cinema" },
-        { title: "Japanese Gems", movies: japanese, description: "Anime and live-action favorites from Japan" },
-        { title: "Critically Acclaimed", movies: topRated, description: "Movies with high ratings" },
+        {
+          title: "Trending Now",
+          movies: trending.slice(0, 20),
+          description: "Most popular movies this week",
+          viewAllLink: "/?sort_by=popularity_desc",
+          totalCount: trending.length
+        },
+        {
+          title: "Hollywood Hits",
+          movies: english.slice(0, 20),
+          description: "Popular English language movies",
+          viewAllLink: "/?with_original_language=en&region=US",
+          totalCount: english.length
+        },
+        {
+          title: "Best of Korea",
+          movies: korean.slice(0, 20),
+          description: "Top picks from South Korean cinema",
+          viewAllLink: "/?with_original_language=ko",
+          totalCount: korean.length
+        },
+        {
+          title: "Japanese Gems",
+          movies: japanese.slice(0, 20),
+          description: "Anime and live-action favorites from Japan",
+          viewAllLink: "/?with_original_language=ja",
+          totalCount: japanese.length
+        },
+        {
+          title: "Critically Acclaimed",
+          movies: topRated.slice(0, 20),
+          description: "Movies with high ratings",
+          viewAllLink: "/?vote_average.gte=8",
+          totalCount: topRated.length
+        },
       ];
     } catch (e) {
       console.error(e);
@@ -159,6 +214,8 @@ export default async function Home(props: {
                   title={section.title}
                   movies={section.movies}
                   description={section.description}
+                  viewAllLink={section.viewAllLink}
+                  totalCount={section.totalCount}
                 />
               ))}
             </div>
