@@ -8,7 +8,7 @@ import { googleSignIn } from "@/actions/google-signin";
 async function login(formData: FormData) {
     "use server";
     try {
-        await signIn("credentials", Object.fromEntries(formData));
+        await signIn("credentials", { ...Object.fromEntries(formData), redirectTo: "/" });
     } catch (error) {
         if ((error as Error).message.includes("CredentialsSignin")) {
             // Returning string to client component form action... requires useFormState but here we kept it simple.
