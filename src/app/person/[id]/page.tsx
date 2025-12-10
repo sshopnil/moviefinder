@@ -6,6 +6,8 @@ import { MapPin, Calendar, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getFavoriteActorStatusAction } from "@/actions/favorite-actors";
+import { FavoriteActorButton } from "@/components/favorite-actor-button";
 
 type Props = {
     params: Promise<{ id: string }>;
@@ -16,9 +18,10 @@ export default async function PersonPage({ params }: Props) {
     if (!id) return notFound();
 
     try {
-        const [person, credits] = await Promise.all([
+        const [person, credits, isFavorite] = await Promise.all([
             movieService.getPersonDetails(parseInt(id)),
-            movieService.getPersonCredits(parseInt(id))
+            movieService.getPersonCredits(parseInt(id)),
+            getFavoriteActorStatusAction(parseInt(id))
         ]);
 
         return (
@@ -45,7 +48,19 @@ export default async function PersonPage({ params }: Props) {
                         {/* Details */}
                         <div className="space-y-6">
                             <div>
-                                <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">{person.name}</h1>
+                                <div className="flex items-start justify-between gap-4">
+                                    <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">{person.name}</h1>
+
+                                    <FavoriteActorButton
+                                        actor={{
+                                            id: person.id,
+                                            name: person.name,
+                                            profile_path: person.profile_path,
+                                            known_for_department: person.known_for_department
+                                        }}
+                                        isFavoriteInitial={isFavorite}
+                                    />
+                                </div>
 
                                 <div className="flex flex-wrap gap-4 text-sm text-gray-300 mb-6">
                                     {person.birthday && (
