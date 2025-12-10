@@ -2,7 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import { resetPassword } from "@/actions/user";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -120,7 +120,9 @@ export default function ResetPasswordPage() {
                      but client component strictly usually handles it. 
                      However, wrapping in Suspense is safer for static generation friendliness. 
                  */}
-                <ResetPasswordFormContent />
+                <Suspense fallback={<div className="text-center text-white">Loading...</div>}>
+                    <ResetPasswordFormContent />
+                </Suspense>
 
                 <div className="text-center">
                     <Link href="/login" className="text-sm text-gray-400 hover:text-white flex items-center justify-center gap-2 transition-colors">
