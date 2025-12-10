@@ -26,6 +26,25 @@ const GENRES = [
     { id: 37, name: "Western" },
 ];
 
+const LANGUAGES = [
+    { code: "en", name: "English" },
+    { code: "ko", name: "Korean" },
+    { code: "ja", name: "Japanese" },
+    { code: "fr", name: "French" },
+    { code: "es", name: "Spanish" },
+    { code: "hi", name: "Hindi" },
+    { code: "zh", name: "Chinese" },
+];
+
+const REGIONS = [
+    { code: "US", name: "United States" },
+    { code: "KR", name: "South Korea" },
+    { code: "JP", name: "Japan" },
+    { code: "IN", name: "India" },
+    { code: "FR", name: "France" },
+    { code: "GB", name: "United Kingdom" },
+];
+
 export function SearchFilters() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -66,7 +85,7 @@ export function SearchFilters() {
             </button>
 
             {isOpen && (
-                <GlassCard className="mt-4 p-4 grid grid-cols-2 md:grid-cols-4 gap-4 animate-in slide-in-from-top-2">
+                <GlassCard className="mt-4 p-4 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 animate-in slide-in-from-top-2">
                     {/* Genre */}
                     <div className="space-y-1.5">
                         <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Genre</label>
@@ -108,6 +127,40 @@ export function SearchFilters() {
                             {[9, 8, 7, 6, 5, 4, 3, 2, 1].map((r) => (
                                 <option key={r} value={r} className="bg-gray-900">
                                     {r}+ Stars
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Language */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Language</label>
+                        <select
+                            value={searchParams.get("with_original_language") || ""}
+                            onChange={(e) => updateFilter("with_original_language", e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500 hover:bg-white/10 transition-colors"
+                        >
+                            <option value="" className="bg-gray-900">All Languages</option>
+                            {LANGUAGES.map((l) => (
+                                <option key={l.code} value={l.code} className="bg-gray-900">
+                                    {l.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Region */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Region</label>
+                        <select
+                            value={searchParams.get("region") || ""}
+                            onChange={(e) => updateFilter("region", e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500 hover:bg-white/10 transition-colors"
+                        >
+                            <option value="" className="bg-gray-900">All Regions</option>
+                            {REGIONS.map((r) => (
+                                <option key={r.code} value={r.code} className="bg-gray-900">
+                                    {r.name}
                                 </option>
                             ))}
                         </select>

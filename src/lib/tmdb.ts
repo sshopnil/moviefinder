@@ -80,8 +80,11 @@ export const movieService = {
         with_genres?: string;
         primary_release_year?: string;
         "vote_average.gte"?: string;
+        "vote_count.gte"?: string;
         with_runtime_gte?: string;
         with_runtime_lte?: string;
+        with_original_language?: string;
+        region?: string;
     }): Promise<Movie[]> => {
         // Remove undefined keys
         const params = Object.fromEntries(

@@ -2,12 +2,14 @@
 import Link from "next/link";
 import { User, LogOut, Home } from "lucide-react";
 import { auth } from "@/auth";
+import { HeaderSearchIcon } from "./header-search-icon";
 
 export async function AuthHeader() {
     const session = await auth();
 
     return (
         <div className="absolute top-4 right-4 z-20 flex gap-4 items-center">
+            <HeaderSearchIcon />
             <Link
                 href="/"
                 className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/80 hover:text-white transition-colors border border-white/5 backdrop-blur-sm"
