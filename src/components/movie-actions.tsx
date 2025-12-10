@@ -17,6 +17,12 @@ export function MovieActions({ movie, isSaved }: MovieActionsProps) {
     // Safely extract trailer key
     const trailerKey = movie.videos?.results?.find(v => v.type === "Trailer" && v.site === "YouTube")?.key;
 
+    // Ensure genre_ids are present (TMDB Details API returns genres array, not genre_ids)
+    const movieWithGenreIds = {
+        ...movie,
+        genre_ids: movie.genre_ids || movie.genres?.map((g) => g.id) || [],
+    };
+
     return (
         <>
             <div className="flex flex-wrap gap-4 pt-4">
@@ -30,7 +36,7 @@ export function MovieActions({ movie, isSaved }: MovieActionsProps) {
                     </button>
                 )}
 
-                <WatchlistButton movie={movie} initialIsSaved={isSaved} />
+                <WatchlistButton movie={movieWithGenreIds} initialIsSaved={isSaved} />
             </div>
 
             {trailerKey && showTrailer && (

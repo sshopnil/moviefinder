@@ -11,6 +11,7 @@ export async function toggleWatchlistAction(movie: {
     poster_path: string | null;
     vote_average: number;
     release_date: string;
+    genre_ids: number[];
 }) {
     const session = await auth();
     if (!session?.user?.id) {
@@ -26,6 +27,7 @@ export async function toggleWatchlistAction(movie: {
 
     if (existing) {
         await Watchlist.findByIdAndDelete(existing._id);
+        revalidatePath("/watchlist");
         revalidatePath("/dashboard");
         revalidatePath(`/movie/${movie.id}`);
         return { added: false };
@@ -37,7 +39,9 @@ export async function toggleWatchlistAction(movie: {
             poster_path: movie.poster_path,
             vote_average: movie.vote_average,
             release_date: movie.release_date,
+            genre_ids: movie.genre_ids,
         });
+        revalidatePath("/watchlist");
         revalidatePath("/dashboard");
         revalidatePath(`/movie/${movie.id}`);
         return { added: true };
@@ -55,6 +59,70 @@ export async function getWatchlistStatusAction(movieId: number) {
     });
 
     return !!existing;
+}
+
+export async function getWatchlistAction(params?: {
+    query?: string;
+    sortBy?: string;
+    genreId?: string;
+}) {
+    const session = await auth();
+    if (!session?.user?.id) return [];
+
+    await connectToDatabase();
+
+    const filter: any = { userId: session.user.id };
+
+    if (params?.query) {
+        filter.title = { $regex: params.query, $options: "i" };
+    }
+
+    if (params?.genreId && params.genreId !== "all") {
+        filter.genre_ids = parseInt(params.genreId);
+    }
+
+    let sort: any = { createdAt: -1 }; // Default: Date Added (Newest)
+
+    if (params?.sortBy) {
+        switch (params.sortBy) {
+            case "date_asc":
+                sort = { createdAt: 1 };
+                break;
+            case "release_desc":
+                sort = { release_date: -1 };
+                break;
+            case "release_asc":
+                sort = { release_date: 1 };
+                break;
+            case "rating_desc":
+                sort = { vote_average: -1 };
+                break;
+            case "rating_asc":
+                sort = { vote_average: 1 };
+                break;
+            default:
+                sort = { createdAt: -1 };
+        }
+    }
+
+    const watchlist = await Watchlist.find(filter).sort(sort);
+
+    return watchlist.map(item => ({
+        id: item.movieId,
+        title: item.title,
+        poster_path: item.poster_path,
+        vote_average: item.vote_average,
+        release_date: item.release_date,
+        genre_ids: item.genre_ids || [],
+        adult: false,
+        backdrop_path: "",
+        original_language: "en",
+        original_title: item.title,
+        overview: "",
+        popularity: 0,
+        video: false,
+        vote_count: 0
+    }));
 }
 
 export async function getUserWatchlistAction() {
@@ -83,4 +151,21 @@ export async function getUserWatchlistAction() {
         video: false,
         vote_count: 0
     }));
+}
+
+export async function getWatchlistGenresAction() {
+    const session = await auth();
+    if (!session?.user?.id) return [];
+
+    await connectToDatabase();
+
+    // distinct genres returns an array of numbers
+    const genreIds = await Watchlist.distinct("genre_ids", { userId: session.user.id });
+
+    // Import here to avoid circular dependencies if any
+    const { MOVIE_GENRES } = await import("@/lib/genres");
+
+    const availableGenres = MOVIE_GENRES.filter(g => genreIds.includes(g.id));
+
+    return availableGenres;
 }

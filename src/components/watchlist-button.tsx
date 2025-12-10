@@ -39,6 +39,7 @@ export function WatchlistButton({ movie, initialIsSaved }: WatchlistButtonProps)
                 poster_path: movie.poster_path,
                 vote_average: movie.vote_average,
                 release_date: movie.release_date,
+                genre_ids: movie.genre_ids,
             });
 
             if (result.error) {

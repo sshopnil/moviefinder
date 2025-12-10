@@ -16,6 +16,7 @@ const WatchlistSchema = new mongoose.Schema(
         poster_path: String,
         vote_average: Number,
         release_date: String,
+        genre_ids: [Number],
     },
     { timestamps: true }
 );

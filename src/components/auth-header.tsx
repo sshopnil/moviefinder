@@ -1,6 +1,6 @@
 
 import Link from "next/link";
-import { User, LogOut, Home } from "lucide-react";
+import { User, LogOut, Home, Heart } from "lucide-react";
 import { auth } from "@/auth";
 import { HeaderSearchIcon } from "./header-search-icon";
 
@@ -19,10 +19,16 @@ export async function AuthHeader() {
             </Link>
 
             {session?.user ? (
-                <Link href="/dashboard" className="flex items-center gap-2 text-white hover:text-gray-300 font-medium px-4 py-2 bg-white/10 rounded-lg backdrop-blur-sm transition-colors border border-white/5">
-                    <User className="h-4 w-4" />
-                    <span>{session.user.name?.split(" ")[0]}</span>
-                </Link>
+                <>
+                    <Link href="/watchlist" className="flex items-center gap-2 text-white hover:text-gray-300 font-medium px-4 py-2 bg-white/10 rounded-lg backdrop-blur-sm transition-colors border border-white/5">
+                        <Heart className="h-4 w-4 fill-white text-white" />
+                        <span>Watchlist</span>
+                    </Link>
+                    <Link href="/dashboard" className="flex items-center gap-2 text-white hover:text-gray-300 font-medium px-4 py-2 bg-white/10 rounded-lg backdrop-blur-sm transition-colors border border-white/5">
+                        <User className="h-4 w-4" />
+                        <span>{session.user.name?.split(" ")[0]}</span>
+                    </Link>
+                </>
             ) : (
                 <>
                     <Link href="/login" className="text-white hover:text-gray-300 font-medium px-4 py-2 bg-white/10 rounded-lg backdrop-blur-sm transition-colors border border-white/5">
