@@ -7,8 +7,10 @@ import { MovieCard } from "@/components/movie-card";
 import { Search } from "lucide-react";
 import { MOVIE_GENRES } from "@/lib/genres";
 
-interface ActorCreditsBrowserProps {
-    credits: Movie[];
+interface MovieBrowserProps {
+    movies: Movie[];
+    title?: string;
+    description?: string;
 }
 
 const SORT_OPTIONS = [
@@ -19,22 +21,24 @@ const SORT_OPTIONS = [
     { value: "rating_asc", label: "Lowest Rated" },
 ];
 
-export function ActorCreditsBrowser({ credits }: ActorCreditsBrowserProps) {
+export function MovieBrowser({ movies, title, description }: MovieBrowserProps) {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedGenre, setSelectedGenre] = useState("all");
     const [sortBy, setSortBy] = useState("popularity_desc");
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 20;
 
-    // Extract unique genres from credits
+    // Extract unique genres from available movies
     const availableGenres = useMemo(() => {
         const genreIds = new Set<number>();
-        credits.forEach(movie => {
+        movies.forEach(movie => {
             movie.genre_ids?.forEach(id => genreIds.add(id));
         });
         return MOVIE_GENRES.filter(g => genreIds.has(g.id));
-    }, [credits]);
+    }, [movies]);
 
     const filteredAndSortedMovies = useMemo(() => {
-        let result = [...credits];
+        let result = [...movies];
 
         // 1. Search
         if (searchQuery) {
@@ -66,13 +70,38 @@ export function ActorCreditsBrowser({ credits }: ActorCreditsBrowserProps) {
         });
 
         return result;
-    }, [credits, searchQuery, selectedGenre, sortBy]);
+    }, [movies, searchQuery, selectedGenre, sortBy]);
+
+    // Reset page when filters change
+    useMemo(() => {
+        setCurrentPage(1);
+    }, [searchQuery, selectedGenre, sortBy]);
+
+    // Calculate pagination properties
+    const totalItems = filteredAndSortedMovies.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const paginatedMovies = filteredAndSortedMovies.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
+
+    const handlePageChange = (newPage: number) => {
+        if (newPage >= 1 && newPage <= totalPages) {
+            setCurrentPage(newPage);
+            // Optional: Scroll to top of grid
+            // window.scrollTo({ top: 0, behavior: 'smooth' }); // Can be annoying if widget is lower down
+        }
+    };
 
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-2">
-                <h2 className="text-2xl font-bold text-white">Known For ({credits.length})</h2>
-                <p className="text-gray-400 text-sm">Browsing {filteredAndSortedMovies.length} movies</p>
+                {title && <h2 className="text-2xl font-bold text-white">{title} ({movies.length})</h2>}
+                {description && <p className="text-gray-400">{description}</p>}
+
+                <p className="text-gray-400 text-sm">
+                    Showing {paginatedMovies.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} movies
+                </p>
             </div>
 
             {/* Filters */}
@@ -114,12 +143,39 @@ export function ActorCreditsBrowser({ credits }: ActorCreditsBrowserProps) {
             </div>
 
             {/* Grid */}
-            {filteredAndSortedMovies.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                    {filteredAndSortedMovies.map((movie) => (
-                        <MovieCard key={movie.id} movie={movie} />
-                    ))}
-                </div>
+            {paginatedMovies.length > 0 ? (
+                <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                        {paginatedMovies.map((movie) => (
+                            <MovieCard key={movie.id} movie={movie} />
+                        ))}
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {totalPages >= 1 && (
+                        <div className="flex justify-center items-center gap-4 mt-8 pt-6 border-t border-white/10">
+                            <button
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+                            >
+                                Previous
+                            </button>
+
+                            <span className="text-gray-400 text-sm">
+                                Page <span className="text-white font-medium">{currentPage}</span> of <span className="text-white font-medium">{totalPages}</span>
+                            </span>
+
+                            <button
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    )}
+                </>
             ) : (
                 <div className="text-center py-20 text-gray-500">
                     No movies found matching your filters.

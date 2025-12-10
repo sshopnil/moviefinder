@@ -1,7 +1,8 @@
 
 import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
-import { ActorCreditsBrowser } from "@/components/actor-credits-browser";
-import { ArrowLeft, MapPin, Calendar, Star } from "lucide-react";
+import { MovieBrowser } from "@/components/movie-browser";
+import { BackButton } from "@/components/back-button";
+import { MapPin, Calendar, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -23,10 +24,7 @@ export default async function PersonPage({ params }: Props) {
         return (
             <div className="min-h-screen relative pb-20">
                 <div className="container mx-auto px-4 py-8">
-                    <Link href="/" className="inline-flex items-center text-gray-400 hover:text-white transition-colors mb-8">
-                        <ArrowLeft className="h-4 w-4 mr-2" />
-                        Back to Search
-                    </Link>
+                    <BackButton label="Back" />
 
                     <div className="grid md:grid-cols-[300px_1fr] gap-8 mb-16">
                         {/* Profile Image */}
@@ -77,7 +75,7 @@ export default async function PersonPage({ params }: Props) {
                     </div>
 
                     <div className="mt-8">
-                        <ActorCreditsBrowser credits={credits} />
+                        <MovieBrowser movies={credits} title="Known For" description="Browsing all movies" />
                     </div>
                 </div>
             </div>

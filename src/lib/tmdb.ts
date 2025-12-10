@@ -53,10 +53,43 @@ export const movieService = {
 
     searchMulti: async (query: string): Promise<{ movies: Movie[], people: any[] }> => {
         if (!query) return { movies: [], people: [] };
-        const data = await fetchFromTMDB<{ results: any[] }>("/search/multi", { query });
 
-        const movies = data.results.filter((item: any) => item.media_type === "movie") as Movie[];
-        const people = data.results.filter((item: any) => item.media_type === "person");
+        // Fetch up to 20 pages (approx 400 results) to provide a "limitless" feel
+        // We fetch in batches to avoid overwhelming the API
+        const maxPages = 20;
+        const batchSize = 5;
+        let allResults: any[] = [];
+
+        // Fetch page 1 first to check total pages? 
+        // For simplicity/speed, we'll just fire the batches. 
+        // A more robust way: Fetch P1, get total_pages, then fetch rest.
+
+        // Let's just blindly fetch 1-20 for now, relying on empty results for out-of-bounds pages.
+        const pages = Array.from({ length: maxPages }, (_, i) => i + 1);
+
+        // Process in chunks
+        for (let i = 0; i < pages.length; i += batchSize) {
+            const batch = pages.slice(i, i + batchSize);
+            const promises = batch.map(page =>
+                fetchFromTMDB<{ results: any[] }>("/search/multi", { query, page: page.toString() })
+                    .catch(() => ({ results: [] }))
+            );
+            const batchResults = await Promise.all(promises);
+            batchResults.forEach(r => {
+                if (r.results) allResults.push(...r.results);
+            });
+        }
+
+        // Deduplicate by ID
+        const seen = new Set();
+        const uniqueResults = allResults.filter(item => {
+            const duplicate = seen.has(item.id);
+            seen.add(item.id);
+            return !duplicate;
+        });
+
+        const movies = uniqueResults.filter((item: any) => item.media_type === "movie") as Movie[];
+        const people = uniqueResults.filter((item: any) => item.media_type === "person");
 
         return { movies, people };
     },
@@ -65,6 +98,32 @@ export const movieService = {
         if (!query) return [];
         const data = await fetchFromTMDB<MovieResponse>("/search/movie", { query });
         return data.results;
+    },
+
+    searchPeople: async (query: string): Promise<any[]> => {
+        if (!query) return [];
+
+        // Fetch up to 5 pages (100 people)
+        const maxPages = 5;
+        const pages = Array.from({ length: maxPages }, (_, i) => i + 1);
+
+        const promises = pages.map(page =>
+            fetchFromTMDB<{ results: any[] }>("/search/person", { query, page: page.toString() })
+                .catch(() => ({ results: [] }))
+        );
+
+        const results = await Promise.all(promises);
+        const allPeople = results.flatMap(r => r.results || []);
+
+        // Deduplicate
+        const seen = new Set();
+        const uniquePeople = allPeople.filter(p => {
+            const duplicate = seen.has(p.id);
+            seen.add(p.id);
+            return !duplicate;
+        });
+
+        return uniquePeople;
     },
 
     getMovieDetails: async (id: number): Promise<MovieDetails> => {
@@ -91,8 +150,34 @@ export const movieService = {
             Object.entries(filters).filter(([_, v]) => v != null && v !== "")
         ) as Record<string, string>;
 
-        const data = await fetchFromTMDB<MovieResponse>("/discover/movie", params);
-        return data.results;
+        // Fetch up to 20 pages
+        const maxPages = 20;
+        const batchSize = 5;
+        let allMovies: Movie[] = [];
+
+        const pages = Array.from({ length: maxPages }, (_, i) => i + 1);
+
+        for (let i = 0; i < pages.length; i += batchSize) {
+            const batch = pages.slice(i, i + batchSize);
+            const promises = batch.map(page =>
+                fetchFromTMDB<MovieResponse>("/discover/movie", { ...params, page: page.toString() })
+                    .catch(() => ({ results: [] } as any))
+            );
+            const batchResults = await Promise.all(promises);
+            batchResults.forEach(r => {
+                if (r.results) allMovies.push(...r.results);
+            });
+        }
+
+        // Deduplicate
+        const seen = new Set();
+        const uniqueMovies = allMovies.filter(m => {
+            const duplicate = seen.has(m.id);
+            seen.add(m.id);
+            return !duplicate;
+        });
+
+        return uniqueMovies;
     },
 
     getMovieImages: async (id: number): Promise<{ backdrops: any[]; posters: any[] }> => {

@@ -1,15 +1,16 @@
 import { Suspense } from "react";
 import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { getRecommendationsFromMood } from "@/lib/ai";
-import { MovieGrid } from "@/components/movie-grid";
-import { Loader2 } from "lucide-react";
+import { MovieBrowser } from "@/components/movie-browser";
+import { MovieSection } from "@/components/movie-section";
 import { Movie } from "@/types/movie";
+import { PersonCard } from "@/components/person-card";
 import { ClientHeader } from "@/components/client-header";
 
 import { SearchFilters } from "@/components/search-filters";
 import Link from "next/link";
 import Image from "next/image";
-import { MovieSection } from "@/components/movie-section";
+import { Loader2 } from "lucide-react";
 
 // Server Component
 export default async function Home(props: {
@@ -126,25 +127,17 @@ export default async function Home(props: {
         {/* People Results (Search Only) */}
         {people.length > 0 && (
           <div className="mb-8 animate-in fade-in slide-in-from-bottom-4">
-            <h2 className="text-2xl font-bold text-white mb-6 pl-2 border-l-4 border-blue-500">People</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {people.map((person) => (
-                <Link key={person.id} href={`/person/${person.id}`} className="group block bg-white/5 rounded-xl p-3 hover:bg-white/10 transition-colors">
-                  <div className="relative aspect-square rounded-full overflow-hidden mb-3 mx-auto max-w-[120px] bg-black/20 group-hover:ring-2 ring-blue-500/50 transition-all">
-                    {person.profile_path ? (
-                      <Image
-                        src={TMDB_IMAGE_URL.profile(person.profile_path)}
-                        alt={person.name}
-                        fill
-                        className="object-cover group-hover:scale-110 transition-transform duration-500"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-gray-500 text-xs">No Image</div>
-                    )}
-                  </div>
-                  <p className="text-center text-sm font-semibold text-white group-hover:text-blue-400 transition-colors truncate">{person.name}</p>
-                  <p className="text-center text-xs text-gray-400 truncate">{person.known_for_department}</p>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white pl-2 border-l-4 border-blue-500">People</h2>
+              {people.length > 5 && (
+                <Link href={`/search/people?q=${encodeURIComponent(query as string)}`} className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                  View All Actors ({people.length})
                 </Link>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {people.slice(0, 5).map((person) => (
+                <PersonCard key={person.id} person={person} />
               ))}
             </div>
           </div>
@@ -157,7 +150,7 @@ export default async function Home(props: {
           </div>
         }>
           {isSearchOrFilter ? (
-            <MovieGrid movies={movies} title={viewTitle} />
+            <MovieBrowser movies={movies} title={viewTitle} description={`Found ${movies.length} results`} />
           ) : (
             <div className="space-y-4">
               {homeSections.map((section) => (

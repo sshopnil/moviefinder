@@ -61,51 +61,14 @@ export async function getWatchlistStatusAction(movieId: number) {
     return !!existing;
 }
 
-export async function getWatchlistAction(params?: {
-    query?: string;
-    sortBy?: string;
-    genreId?: string;
-}) {
+// Simplified for client-side filtering
+export async function getWatchlistAction() {
     const session = await auth();
     if (!session?.user?.id) return [];
 
     await connectToDatabase();
 
-    const filter: any = { userId: session.user.id };
-
-    if (params?.query) {
-        filter.title = { $regex: params.query, $options: "i" };
-    }
-
-    if (params?.genreId && params.genreId !== "all") {
-        filter.genre_ids = parseInt(params.genreId);
-    }
-
-    let sort: any = { createdAt: -1 }; // Default: Date Added (Newest)
-
-    if (params?.sortBy) {
-        switch (params.sortBy) {
-            case "date_asc":
-                sort = { createdAt: 1 };
-                break;
-            case "release_desc":
-                sort = { release_date: -1 };
-                break;
-            case "release_asc":
-                sort = { release_date: 1 };
-                break;
-            case "rating_desc":
-                sort = { vote_average: -1 };
-                break;
-            case "rating_asc":
-                sort = { vote_average: 1 };
-                break;
-            default:
-                sort = { createdAt: -1 };
-        }
-    }
-
-    const watchlist = await Watchlist.find(filter).sort(sort);
+    const watchlist = await Watchlist.find({ userId: session.user.id }).sort({ createdAt: -1 });
 
     return watchlist.map(item => ({
         id: item.movieId,

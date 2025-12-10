@@ -6,10 +6,11 @@ import { cn } from "@/lib/utils";
 
 interface SearchBarProps {
     onSearch: (query: string) => void;
+    searchLoading?: boolean;
     className?: string;
 }
 
-export function SearchBar({ onSearch, className }: SearchBarProps) {
+export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps) {
     const [query, setQuery] = useState("");
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -31,7 +32,7 @@ export function SearchBar({ onSearch, className }: SearchBarProps) {
                 type="submit"
                 className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition-colors"
             >
-                Search
+                {searchLoading ? "Searching..." : "Search"}
             </button>
         </form>
     );

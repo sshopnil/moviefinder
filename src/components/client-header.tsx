@@ -8,14 +8,15 @@ import { useState } from "react";
 export function ClientHeader() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [searchLoading, setSearchLoading] = useState(false);
 
     const handleSearch = (query: string) => {
         if (!query.trim()) return;
-        setIsLoading(true);
+        setSearchLoading(true);
         router.push(`/?q=${encodeURIComponent(query)}`);
         // Reset loading state after navigation completes usually happens automatically by Next.js if we used useTransition 
         // but here we just show it briefly.
-        // setTimeout(() => setIsLoading(false), 2000);
+        setTimeout(() => setSearchLoading(false), 2000);
     };
 
     const handleMoodSubmit = (mood: string) => {
@@ -27,7 +28,7 @@ export function ClientHeader() {
 
     return (
         <>
-            <SearchBar onSearch={handleSearch} />
+            <SearchBar onSearch={handleSearch} searchLoading={searchLoading} />
             <MoodSelector onMoodSubmit={handleMoodSubmit} isLoading={isLoading} />
         </>
     );

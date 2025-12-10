@@ -1,4 +1,5 @@
 import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
+import { BackButton } from "@/components/back-button";
 import { ArrowLeft, Calendar, Clock, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -45,10 +46,7 @@ export default async function MoviePage({ params }: Props) {
             </div>
 
             <div className="container mx-auto px-4 py-8">
-                <Link href="/" className="inline-flex items-center text-gray-400 hover:text-white transition-colors mb-8">
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Search
-                </Link>
+                <BackButton label="Back" />
 
                 <div className="grid md:grid-cols-[300px_1fr] gap-8">
                     {/* Poster */}
