@@ -28,7 +28,7 @@ export default async function DashboardPage() {
 
     return (
         <div className="min-h-screen container mx-auto px-4 py-8">
-            <div className="flex flex-col md:flex-row items-center gap-6 mb-12 p-6 rounded-2xl bg-white/5 border border-white/10">
+            <div className="flex flex-col md:flex-row items-center gap-6 mb-12 p-6 rounded-2xl bg-white/5 border border-white/10 mt-10">
                 <div className="relative h-20 w-20 rounded-full overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-500">
                     {session.user.image ? (
                         <Image

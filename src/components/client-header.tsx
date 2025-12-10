@@ -15,7 +15,7 @@ export function ClientHeader() {
         router.push(`/?q=${encodeURIComponent(query)}`);
         // Reset loading state after navigation completes usually happens automatically by Next.js if we used useTransition 
         // but here we just show it briefly.
-        setTimeout(() => setIsLoading(false), 2000);
+        // setTimeout(() => setIsLoading(false), 2000);
     };
 
     const handleMoodSubmit = (mood: string) => {

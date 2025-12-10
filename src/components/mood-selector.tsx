@@ -40,7 +40,7 @@ export function MoodSelector({ onMoodSubmit, isLoading }: MoodSelectorProps) {
                         disabled={isLoading || !mood.trim()}
                         className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
                     >
-                        {isLoading ? "Thinking..." : "Inspire Me"}
+                        {isLoading ? "Thinking..." : "AI Search"}
                     </button>
                 </form>
             </div>

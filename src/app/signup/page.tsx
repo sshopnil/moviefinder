@@ -8,8 +8,15 @@ import { GlassCard } from "@/components/ui/glass-card";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
-// Fix: Correct type for initialState according to useFormState expectations
-const initialState: any = {
+type SignupState = {
+    error?: {
+        name?: string[];
+        email?: string[];
+        password?: string[];
+    } | null;
+};
+
+const initialState: SignupState = {
     error: null,
 };
 
