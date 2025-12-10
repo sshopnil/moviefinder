@@ -2,7 +2,7 @@
 import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { MovieBrowser } from "@/components/movie-browser";
 import { BackButton } from "@/components/back-button";
-import { MapPin, Calendar, Star } from "lucide-react";
+import { MapPin, Calendar, Star, Instagram } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -88,6 +88,17 @@ export default async function PersonPage({ params }: Props) {
                                         <Star className="h-4 w-4 text-yellow-500" />
                                         <span>{person.known_for_department}</span>
                                     </div>
+                                    {person.external_ids?.instagram_id && (
+                                        <a
+                                            href={`https://instagram.com/${person.external_ids.instagram_id}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 bg-gradient-to-r from-pink-500 to-violet-500 px-3 py-1 rounded-full text-white hover:opacity-90 transition-opacity"
+                                        >
+                                            <Instagram className="h-4 w-4" />
+                                            <span>Instagram</span>
+                                        </a>
+                                    )}
                                 </div>
 
                                 <h3 className="text-lg font-semibold text-white mb-2">Biography</h3>

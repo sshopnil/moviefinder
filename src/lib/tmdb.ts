@@ -188,7 +188,7 @@ export const movieService = {
     },
 
     getPersonDetails: async (id: number): Promise<any> => {
-        return fetchFromTMDB<any>(`/person/${id}`);
+        return fetchFromTMDB<any>(`/person/${id}`, { append_to_response: "external_ids" });
     },
 
     getPersonCredits: async (id: number): Promise<Movie[]> => {
