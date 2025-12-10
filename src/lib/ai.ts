@@ -65,7 +65,7 @@ export async function getMovieVerdict(title: string, ratings: any, reviews: any[
             Ratings: ${ratingsSummary}
             User Reviews Snippets: ${reviewsSummary}
 
-            Based on this, act as a witty movie buff friend. 
+            Based on this, act as a witty movie buff friend. Do not be biased by personal taste—focus on general consensus. Focus on the ending impact on viewers.
             1. Give a "Verdict": "Must Watch", "Solid Choice", "Only for Fans", or "Skip".
             2. Give a 1-sentence explanation why.
             
