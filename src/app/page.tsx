@@ -110,7 +110,7 @@ export default async function Home(props: {
         movies = movies.filter(m => m.original_language === with_original_language);
       }
 
-      movies = movies.slice(0, 20); // Limit to top results after filtering for better relevance
+      // movies = movies.slice(0, 20); // Removed limit to show all AI results with pagination
 
     } catch (e) {
       console.error(e);

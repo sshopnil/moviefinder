@@ -7,7 +7,10 @@ import { notFound } from "next/navigation";
 import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
 import { getWatchlistStatusAction } from "@/actions/watchlist";
-import { MediaGallery } from "@/components/media-gallery";
+import {Suspense} from "react";
+import {MediaGalleryLoader} from "@/components/media-gallery-loader";
+import {MediaGallerySkeleton} from "@/components/media-gallery-skeleton";
+
 
 // Use generic 'params' type handling available in newer Next.js versions or simple awaitable
 type Props = {
@@ -21,7 +24,6 @@ export default async function MoviePage({ params }: Props) {
 
     let movie;
     let isSaved = false;
-    let images: { backdrops: any[]; posters: any[] } = { backdrops: [], posters: [] };
 
     try {
         movie = await movieService.getMovieDetails(parseInt(id));
@@ -37,7 +39,6 @@ export default async function MoviePage({ params }: Props) {
         }).catch(e => console.error("Failed to log view:", e));
 
         isSaved = await getWatchlistStatusAction(parseInt(id));
-        images = await movieService.getMovieImages(parseInt(id));
     } catch (e) {
         console.error(e);
         return notFound();
@@ -110,7 +111,9 @@ export default async function MoviePage({ params }: Props) {
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-white/10">
-                            <MediaGallery images={images} />
+                            <Suspense fallback={<MediaGallerySkeleton />}>
+                                <MediaGalleryLoader id={movie.id} />
+                            </Suspense>
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-white/10">
