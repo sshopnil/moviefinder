@@ -77,20 +77,6 @@ export default async function Home(props: {
     } catch (e) {
       console.error(e);
     }
-  } else if (with_genres || primary_release_year || vote_average_gte || with_original_language || region) {
-    isSearchOrFilter = true;
-    viewTitle = "Filtered Results";
-    try {
-      movies = await movieService.getDiscover({
-        with_genres,
-        primary_release_year,
-        "vote_average.gte": vote_average_gte,
-        with_original_language,
-        region
-      });
-    } catch (e) {
-      console.error(e);
-    }
   } else if (mood) {
     isSearchOrFilter = true;
     viewTitle = `AI Recommendations for "${mood}"`;
@@ -107,7 +93,39 @@ export default async function Home(props: {
         const duplicate = seen.has(m.id);
         seen.add(m.id);
         return !duplicate && m.poster_path; // Only show movies with posters for aesthetics
-      }).slice(0, 10); // Limit to top results
+      });
+
+      // Apply in-memory filters to AI results
+      if (with_genres) {
+        const genreId = parseInt(with_genres);
+        movies = movies.filter(m => m.genre_ids?.includes(genreId));
+      }
+      if (primary_release_year) {
+        movies = movies.filter(m => m.release_date?.startsWith(primary_release_year));
+      }
+      if (vote_average_gte) {
+        movies = movies.filter(m => m.vote_average >= parseFloat(vote_average_gte));
+      }
+      if (with_original_language) {
+        movies = movies.filter(m => m.original_language === with_original_language);
+      }
+
+      movies = movies.slice(0, 20); // Limit to top results after filtering for better relevance
+
+    } catch (e) {
+      console.error(e);
+    }
+  } else if (with_genres || primary_release_year || vote_average_gte || with_original_language || region) {
+    isSearchOrFilter = true;
+    viewTitle = "Filtered Results";
+    try {
+      movies = await movieService.getDiscover({
+        with_genres,
+        primary_release_year,
+        "vote_average.gte": vote_average_gte,
+        with_original_language,
+        region
+      });
     } catch (e) {
       console.error(e);
     }
