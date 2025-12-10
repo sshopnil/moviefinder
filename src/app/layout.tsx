@@ -9,6 +9,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "MovieFinder AI",
   description: "Find your next favorite movie with AI",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 export default function RootLayout({
