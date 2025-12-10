@@ -66,7 +66,7 @@ export default async function Home(props: {
     try {
       const titles = await getRecommendationsFromMood(mood);
       const results = await Promise.all(
-        titles.map((title) => movieService.searchMovies(title))
+        titles.map((title: string) => movieService.searchMovies(title))
       );
       // Flatten and deduplicate
       const allMovies = results.flatMap((r) => r);

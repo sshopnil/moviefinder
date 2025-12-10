@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.45",
+    "@ai-sdk/openai": "^2.0.80",
     "@radix-ui/react-dialog": "^1.1.15",
     "ai": "^5.0.108",
     "bcryptjs": "^3.0.3",

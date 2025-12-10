@@ -1,36 +1,35 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateObject } from "ai";
-import { z } from "zod";
-
-// const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+import { createOpenAI } from "@ai-sdk/openai";
+import { generateText } from "ai";
 
 export async function getRecommendationsFromMood(mood: string) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-        console.warn("GEMINI_API_KEY missing");
-        // Mock response for dev without keys
+        console.warn("GROQ_API_KEY missing");
+        // Mock response for dev without keys or if key is not set
         return ["Inception", "The Grand Budapest Hotel", "Inside Out", "The Dark Knight", "Amélie"];
     }
 
-    const google = createGoogleGenerativeAI({
+    const groq = createOpenAI({
+        baseURL: 'https://api.groq.com/openai/v1',
         apiKey,
     });
 
     try {
-        const { object } = await generateObject({
-            model: google("gemini-2.0-flash"),
-            schema: z.object({
-                movies: z.array(z.string()).describe("List of 5 movie titles that perfectly match the mood"),
-                reasoning: z.string().describe("Brief explanation of why these movies fit the mood"),
-            }),
+        const { text } = await generateText({
+            model: groq("llama-3.3-70b-versatile"),
             prompt: `Suggest 5 movies for a user who is feeling: "${mood}". 
       Focus on a mix of hidden gems and classics. 
-      Return only the movie titles in the array.`,
+      Return ONLY a raw JSON object (no markdown formatting) with a single key "movies" containing an array of 5 string titles.
+      Example usage: { "movies": ["Movie 1", "Movie 2"] }`,
+            maxRetries: 1,
         });
 
-        return object.movies;
+        const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanedText);
+        return Array.isArray(parsed.movies) ? parsed.movies : [];
     } catch (error) {
         console.error("AI Error:", error);
-        return [];
+        // Fallback to a diverse list of high-quality movies when AI quota is exceeded or fails
+        return ["The Shawshank Redemption", "Spirited Away", "Parasite", "The Grand Budapest Hotel", "La La Land"];
     }
 }

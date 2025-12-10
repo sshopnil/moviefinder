@@ -32,7 +32,7 @@ export function MovieCard({ movie }: MovieCardProps) {
                             <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
                             {movie.vote_average.toFixed(1)}
                         </span>
-                        <span>{new Date(movie.release_date).getFullYear()}</span>
+                        <span>{movie.release_date ? new Date(movie.release_date).getFullYear() : 'N/A'}</span>
                     </div>
                     <p className="mt-2 line-clamp-2 text-xs text-gray-400 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                         {movie.overview}

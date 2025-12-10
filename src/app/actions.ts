@@ -30,7 +30,7 @@ export async function getRecommendationsAction(mood: string): Promise<Movie[]> {
         if (!titles.length) return [];
 
         // Parallel fetch for details
-        const moviePromises = titles.map(async (title) => {
+        const moviePromises = titles.map(async (title: string) => {
             const results = await movieService.searchMovies(title);
             return results[0];
         });
