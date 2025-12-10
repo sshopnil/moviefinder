@@ -1,84 +1,56 @@
-"use client";
-
-import { useEffect, useState, Suspense } from "react";
-import { Movie } from "@/types/movie";
-import { getTrendingMoviesAction, searchMoviesAction, getRecommendationsAction } from "./actions";
-import { MovieCard } from "@/components/movie-card";
-import { SearchBar } from "@/components/search-bar";
-import { MoodSelector } from "@/components/mood-selector";
+import { Suspense } from "react";
+import { movieService } from "@/lib/tmdb";
+import { getRecommendationsFromMood } from "@/lib/ai";
+import { MovieGrid } from "@/components/movie-grid";
 import { Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Movie } from "@/types/movie";
+import { ClientHeader } from "@/components/client-header";
+import { AuthHeader } from "@/components/auth-header";
 
-function HomeContent() {
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [viewTitle, setViewTitle] = useState("Trending Now");
+// Server Component
+export default async function Home(props: {
+  searchParams: Promise<{ q?: string; mood?: string }>;
+}) {
+  const searchParams = await props.searchParams;
+  const { q: query, mood } = searchParams;
 
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  let movies: Movie[] = [];
+  let viewTitle = "Trending Now";
 
-  useEffect(() => {
-    const query = searchParams.get("q");
-    const mood = searchParams.get("mood");
-
-    if (query) {
-      loadSearch(query);
-    } else if (mood) {
-      loadMood(mood);
-    } else {
-      loadTrending();
-    }
-  }, [searchParams]);
-
-  const loadTrending = async () => {
-    setIsLoading(true);
+  // Data Fetching logic on the server
+  if (query) {
+    viewTitle = `Results for "${query}"`;
     try {
-      const data = await getTrendingMoviesAction();
-      setMovies(data);
-      setViewTitle("Trending Now");
-    } catch (error) {
-      console.error("Failed to load trending:", error);
-    } finally {
-      setIsLoading(false);
+      movies = await movieService.searchMovies(query);
+    } catch (e) {
+      console.error(e);
     }
-  };
-
-  const loadSearch = async (query: string) => {
-    setIsLoading(true);
-    setViewTitle(`Results for "${query}"`);
+  } else if (mood) {
+    viewTitle = `AI Recommendations for "${mood}"`;
     try {
-      const results = await searchMoviesAction(query);
-      setMovies(results);
-    } catch (error) {
-      console.error("Search failed:", error);
-    } finally {
-      setIsLoading(false);
+      const titles = await getRecommendationsFromMood(mood);
+      const results = await Promise.all(
+        titles.map((title) => movieService.searchMovies(title))
+      );
+      // Flatten and deduplicate
+      const allMovies = results.flatMap((r) => r);
+      // Basic dedup by ID
+      const seen = new Set();
+      movies = allMovies.filter(m => {
+        const duplicate = seen.has(m.id);
+        seen.add(m.id);
+        return !duplicate && m.poster_path; // Only show movies with posters for aesthetics
+      }).slice(0, 10); // Limit to top results
+    } catch (e) {
+      console.error(e);
     }
-  };
-
-  const loadMood = async (mood: string) => {
-    setIsLoading(true);
-    setViewTitle(`AI Recommendations for "${mood}"`);
+  } else {
     try {
-      const recommendedMovies = await getRecommendationsAction(mood);
-      setMovies(recommendedMovies);
-    } catch (error) {
-      console.error("Mood search failed:", error);
-    } finally {
-      setIsLoading(false);
+      movies = await movieService.getTrending();
+    } catch (e) {
+      console.error(e);
     }
-  };
-
-  const handleSearch = (query: string) => {
-    if (!query.trim()) return;
-    router.push(`/?q=${encodeURIComponent(query)}`);
-  };
-
-  const handleMoodSubmit = (mood: string) => {
-    if (!mood.trim()) return;
-    router.push(`/?mood=${encodeURIComponent(mood)}`);
-  };
+  }
 
   return (
     <main className="container mx-auto px-4 py-8 min-h-screen flex flex-col gap-8">
@@ -92,56 +64,20 @@ function HomeContent() {
         </p>
 
         <div className="w-full max-w-4xl flex flex-col gap-4 items-center z-10">
-          <SearchBar onSearch={handleSearch} />
-          <MoodSelector onMoodSubmit={handleMoodSubmit} isLoading={isLoading} />
+          {/* Client Components for interactivity */}
+          <ClientHeader />
         </div>
       </header>
 
-      {/* Grid */}
-      <section className="flex-1 mt-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-semibold text-white/90">{viewTitle}</h2>
+      <AuthHeader />
+
+      <Suspense fallback={
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-10 w-10 text-white animate-spin" />
         </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-10 w-10 text-white animate-spin" />
-          </div>
-        ) : (
-          <motion.div
-            layout
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6"
-          >
-            <AnimatePresence mode="popLayout">
-              {movies.map((movie) => (
-                <motion.div
-                  key={movie.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <MovieCard movie={movie} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
-        )}
-
-        {!isLoading && movies.length === 0 && (
-          <div className="text-center py-20 text-gray-500">
-            No movies found. Try a different search.
-          </div>
-        )}
-      </section>
+      }>
+        <MovieGrid movies={movies} title={viewTitle} />
+      </Suspense>
     </main>
-  );
-}
-
-export default function Home() {
-  return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-white">Loading...</div>}>
-      <HomeContent />
-    </Suspense>
   );
 }

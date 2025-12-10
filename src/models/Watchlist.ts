@@ -3,9 +3,9 @@ import mongoose from "mongoose";
 const WatchlistSchema = new mongoose.Schema(
     {
         userId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
+            type: String, // Allow both ObjectId strings and OAuth UUIDs
             required: true,
+            index: true
         },
         movieId: {
             type: Number,

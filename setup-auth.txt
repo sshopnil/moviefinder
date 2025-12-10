@@ -1,0 +1,14 @@
+
+# 1. GENERATE AUTH SECRET
+# Run this command in your terminal:
+# npx auth secret
+# OR copy this generated string:
+# e98e9c00f388f40dff047355118a61639f4e4066506060d3d13224edcbed15e7
+
+# 2. UPDATE .env.local
+# Add the following line to your .env.local file:
+# AUTH_SECRET="e98e9c00f388f40dff047355118a61639f4e4066506060d3d13224edcbed15e7"
+# AUTH_URL="http://localhost:3000"
+
+# 3. VERIFY MONGODB_URI
+# Ensure MONGODB_URI is set correctly.

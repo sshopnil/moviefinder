@@ -1,16 +1,21 @@
 "use client";
 
-import { Play, Plus, Check } from "lucide-react";
+import { Play } from "lucide-react";
 import { useState } from "react";
 import { TrailerModal } from "@/components/trailer-modal";
-import { cn } from "@/lib/utils";
+import { WatchlistButton } from "@/components/watchlist-button";
+import { MovieDetails } from "@/types/movie";
 
 interface MovieActionsProps {
-    trailerKey?: string;
+    movie: MovieDetails;
+    isSaved: boolean;
 }
 
-export function MovieActions({ trailerKey }: MovieActionsProps) {
+export function MovieActions({ movie, isSaved }: MovieActionsProps) {
     const [showTrailer, setShowTrailer] = useState(false);
+
+    // Safely extract trailer key
+    const trailerKey = movie.videos?.results?.find(v => v.type === "Trailer" && v.site === "YouTube")?.key;
 
     return (
         <>
@@ -25,7 +30,7 @@ export function MovieActions({ trailerKey }: MovieActionsProps) {
                     </button>
                 )}
 
-                {/* Watchlist button will go here later */}
+                <WatchlistButton movie={movie} initialIsSaved={isSaved} />
             </div>
 
             {trailerKey && showTrailer && (
