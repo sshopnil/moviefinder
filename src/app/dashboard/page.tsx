@@ -1,21 +1,7 @@
-
-
 import { auth } from "@/auth";
-import { getUserWatchlistAction } from "@/actions/watchlist";
-import { MovieGrid } from "@/components/movie-grid";
 import { redirect } from "next/navigation";
-import Image from "next/image";
-import { signOutAction } from "@/actions/signout";
-
-function SignOutButton() {
-    return (
-        <form action={signOutAction}>
-            <button type="submit" className="text-sm text-red-400 hover:text-red-300 transition-colors">
-                Sign Out
-            </button>
-        </form>
-    );
-}
+import { GlassCard } from "@/components/ui/glass-card";
+import { UserPasswordForm } from "@/components/user-password-form";
 
 export default async function DashboardPage() {
     const session = await auth();
@@ -24,37 +10,35 @@ export default async function DashboardPage() {
         redirect("/login");
     }
 
-    const movies = await getUserWatchlistAction();
-
     return (
-        <div className="min-h-screen container mx-auto px-4 py-8">
-            <div className="flex flex-col md:flex-row items-center gap-6 mb-12 p-6 rounded-2xl bg-white/5 border border-white/10 mt-10">
-                <div className="relative h-20 w-20 rounded-full overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-500">
-                    {session.user.image ? (
-                        <Image
-                            src={session.user.image}
-                            alt={session.user.name || "User"}
-                            fill
-                            className="object-cover"
-                        />
-                    ) : (
-                        <div className="flex items-center justify-center h-full text-2xl font-bold text-white">
-                            {session.user.name?.[0]?.toUpperCase() || "U"}
+        <main className="container mx-auto px-4 py-20 min-h-screen">
+            <h1 className="text-4xl font-bold mb-8 text-white">Dashboard</h1>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <GlassCard className="space-y-6">
+                    <h2 className="text-2xl font-semibold text-white mb-4">Profile</h2>
+                    <div className="space-y-1">
+                        <label className="text-sm text-gray-400">Name</label>
+                        <div className="text-lg text-white">{session.user.name}</div>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-sm text-gray-400">Email</label>
+                        <div className="text-lg text-white">{session.user.email}</div>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-sm text-gray-400">Account Type</label>
+                        <div className="text-lg text-white capitalize">
+                            {/* We can infer this, but for now just showing simple info */}
+                            User
                         </div>
-                    )}
-                </div>
+                    </div>
+                </GlassCard>
 
-                <div className="text-center md:text-left flex-1">
-                    <h1 className="text-2xl font-bold text-white">{session.user.name}</h1>
-                    <p className="text-gray-400">{session.user.email}</p>
-                </div>
-
-                <div className="flex gap-4">
-                    <SignOutButton />
-                </div>
+                <GlassCard className="space-y-6">
+                    <h2 className="text-2xl font-semibold text-white mb-4">Security</h2>
+                    <UserPasswordForm userEmail={session.user.email!} />
+                </GlassCard>
             </div>
-
-            <MovieGrid movies={movies} title="My Watchlist" />
-        </div>
+        </main>
     );
 }

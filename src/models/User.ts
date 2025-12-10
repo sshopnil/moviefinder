@@ -15,11 +15,13 @@ const UserSchema = new mongoose.Schema(
         },
         password: {
             type: String,
-            required: [true, "Please provide a password"],
+            required: false,
         },
         image: {
             type: String,
         },
+        resetPasswordToken: String,
+        resetPasswordExpire: Date,
     },
     { timestamps: true }
 );
