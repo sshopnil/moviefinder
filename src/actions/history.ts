@@ -85,7 +85,9 @@ export async function getRecentlyViewedAction(limit = 10) {
     return history.map(h => ({
         id: h.itemId,
         title: h.title, // name or title
+        name: h.title || 'Unknown', // Alias for PersonCard
         poster_path: h.poster_path,
+        profile_path: h.poster_path || null, // Alias for PersonCard
         media_type: h.itemType, // 'movie' or 'person'
         // Mock timestamps or minimal fields
         release_date: '',
