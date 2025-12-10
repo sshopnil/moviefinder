@@ -11,6 +11,7 @@ import { SearchFilters } from "@/components/search-filters";
 import Link from "next/link";
 import Image from "next/image";
 import { Loader2 } from "lucide-react";
+import { logSearchAction } from "@/actions/history";
 
 // Server Component
 export default async function Home(props: {
@@ -48,6 +49,10 @@ export default async function Home(props: {
     viewTitle = `Results for "${query}"`;
     try {
       const results = await movieService.searchMulti(query);
+
+      // Log search history (fire and forget to not block)
+      logSearchAction(query).catch(err => console.error("Failed to log search:", err));
+
       movies = results.movies;
       people = results.people;
 

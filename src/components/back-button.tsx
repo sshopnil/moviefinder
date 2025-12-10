@@ -10,7 +10,7 @@ export function BackButton({ label = "Back" }: { label?: string }) {
     return (
         <button
             onClick={() => router.back()}
-            className="inline-flex items-center text-gray-400 hover:text-white transition-colors mb-8"
+            className="inline-flex items-center text-gray-400 hover:text-white transition-colors mb-8 mt-10"
         >
             <ArrowLeft className="h-4 w-4 mr-2" />
             {label}

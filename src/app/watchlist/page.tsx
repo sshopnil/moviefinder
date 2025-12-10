@@ -8,6 +8,8 @@ import { PersonBrowser } from "@/components/person-browser";
 import Link from "next/link";
 import { Film, Users } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 type Props = {
     searchParams: Promise<{ view?: string }>;
 };

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFavoriteActorStatusAction } from "@/actions/favorite-actors";
 import { FavoriteActorButton } from "@/components/favorite-actor-button";
+import { logViewAction } from "@/actions/history";
 
 type Props = {
     params: Promise<{ id: string }>;
@@ -23,6 +24,14 @@ export default async function PersonPage({ params }: Props) {
             movieService.getPersonCredits(parseInt(id)),
             getFavoriteActorStatusAction(parseInt(id))
         ]);
+
+        // Log view
+        logViewAction({
+            id: person.id,
+            type: 'person',
+            title: person.name,
+            poster_path: person.profile_path
+        }).catch(e => console.error("Failed to log person view:", e));
 
         return (
             <div className="min-h-screen relative pb-20">

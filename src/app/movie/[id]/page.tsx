@@ -4,6 +4,7 @@ import { ArrowLeft, Calendar, Clock, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
 import { getWatchlistStatusAction } from "@/actions/watchlist";
 import { MediaGallery } from "@/components/media-gallery";
@@ -24,6 +25,17 @@ export default async function MoviePage({ params }: Props) {
 
     try {
         movie = await movieService.getMovieDetails(parseInt(id));
+
+        if (!movie) return notFound();
+
+        // Log view
+        logViewAction({
+            id: movie.id,
+            type: 'movie',
+            title: movie.title,
+            poster_path: movie.poster_path
+        }).catch(e => console.error("Failed to log view:", e));
+
         isSaved = await getWatchlistStatusAction(parseInt(id));
         images = await movieService.getMovieImages(parseInt(id));
     } catch (e) {
