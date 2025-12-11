@@ -7,9 +7,9 @@ import { notFound } from "next/navigation";
 import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
 import { getWatchlistStatusAction } from "@/actions/watchlist";
-import {Suspense} from "react";
-import {MediaGalleryLoader} from "@/components/media-gallery-loader";
-import {MediaGallerySkeleton} from "@/components/media-gallery-skeleton";
+import { Suspense } from "react";
+import { MediaGalleryLoader } from "@/components/media-gallery-loader";
+import { MediaGallerySkeleton } from "@/components/media-gallery-skeleton";
 
 
 // Use generic 'params' type handling available in newer Next.js versions or simple awaitable
@@ -23,7 +23,9 @@ export default async function MoviePage({ params }: Props) {
     if (!id) return notFound();
 
     let movie;
-    let isSaved = false;
+
+    let savedStatus = false;
+    let watchedStatus = false;
 
     try {
         movie = await movieService.getMovieDetails(parseInt(id));
@@ -38,7 +40,11 @@ export default async function MoviePage({ params }: Props) {
             poster_path: movie.poster_path
         }).catch(e => console.error("Failed to log view:", e));
 
-        isSaved = await getWatchlistStatusAction(parseInt(id));
+        const status = await getWatchlistStatusAction(parseInt(id));
+        if (status) {
+            savedStatus = status.isSaved;
+            watchedStatus = status.isWatched;
+        }
     } catch (e) {
         console.error(e);
         return notFound();
@@ -80,7 +86,7 @@ export default async function MoviePage({ params }: Props) {
                             <p className="text-xl text-gray-400 italic">{movie.tagline}</p>
                         </div>
 
-                        <MovieActions movie={movie} isSaved={isSaved} />
+                        <MovieActions movie={movie} isSaved={savedStatus} isWatched={watchedStatus} />
 
                         <div className="flex flex-wrap gap-4 text-sm text-gray-300">
                             <div className="flex items-center gap-1 bg-white/5 px-3 py-1 rounded-full">

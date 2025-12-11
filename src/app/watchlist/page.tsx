@@ -59,11 +59,21 @@ export default async function WatchlistPage({ searchParams }: Props) {
                     title="Favorite Actors"
                 />
             ) : (
-                <MovieBrowser
-                    movies={watchlist}
-                    title="Watchlist"
-                    description={`You have ${watchlist.length} movies in your list.`}
-                />
+                <div className="space-y-12">
+                    <MovieBrowser
+                        movies={watchlist.filter(m => !m.watched)}
+                        title="Watchlist"
+                        description={`You have ${watchlist.filter(m => !m.watched).length} movies to watch.`}
+                    />
+
+                    {watchlist.some(m => m.watched) && (
+                        <MovieBrowser
+                            movies={watchlist.filter(m => m.watched)}
+                            title="Watched Movies"
+                            description={`You have watched ${watchlist.filter(m => m.watched).length} movies.`}
+                        />
+                    )}
+                </div>
             )}
         </main>
     );

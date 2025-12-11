@@ -10,6 +10,7 @@ export interface Movie {
     genre_ids?: number[];
     original_language?: string;
     popularity: number;
+    watched?: boolean;
 }
 
 export interface MovieDetails extends Movie {

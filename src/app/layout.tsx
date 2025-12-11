@@ -3,6 +3,8 @@ import { Inter } from "next/font/google"; // Using Inter for a clean modern look
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { AuthHeader } from "@/components/auth-header";
+import { WatchedProvider } from "@/components/watched-context";
+import { getWatchedIdsAction } from "@/actions/watchlist";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -14,11 +16,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const watchedIds = await getWatchedIdsAction();
+
   return (
     <html lang="en" className="dark">
       <body className={`${inter.className} min-h-screen bg-background text-foreground antialiased selection:bg-white/20`}>
@@ -26,7 +30,9 @@ export default function RootLayout({
           <div className="fixed inset-0 bg-[url('/noise.png')] opacity-[0.03] pointer-events-none mix-blend-overlay z-50"></div>
           <div className="fixed inset-0 bg-gradient-to-br from-purple-900/10 via-background to-blue-900/10 pointer-events-none -z-10"></div>
           <AuthHeader />
-          {children}
+          <WatchedProvider initialWatchedIds={watchedIds}>
+            {children}
+          </WatchedProvider>
         </Providers>
       </body>
     </html>

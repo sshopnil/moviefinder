@@ -1,10 +1,10 @@
+import { CardWatchedOverlay } from "@/components/card-watched-overlay";
 import { Movie } from "@/types/movie";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { Star } from "lucide-react";
 import Image from "next/image";
-import { motion } from "framer-motion";
-
 import Link from "next/link";
+import { motion } from "framer-motion";
 
 interface MovieCardProps {
     movie: Movie;
@@ -24,6 +24,8 @@ export function MovieCard({ movie }: MovieCardProps) {
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-60 transition-opacity duration-300 group-hover:opacity-80" />
+
+                <CardWatchedOverlay movie={movie} />
 
                 <div className="absolute bottom-0 left-0 w-full p-4 translate-y-2 transition-transform duration-300 group-hover:translate-y-0">
                     <h3 className="line-clamp-1 text-xl font-bold text-white mb-1">{movie.title}</h3>
