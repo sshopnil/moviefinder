@@ -75,6 +75,7 @@ export function SearchFilters() {
     const currentGenre = searchParams.get("with_genres") || "";
     const currentYear = searchParams.get("primary_release_year") || "";
     const currentRating = searchParams.get("vote_average.gte") || "";
+    const includeAdult = searchParams.get("include_adult") === "true";
 
     return (
         <div className="mb-8">
@@ -169,6 +170,28 @@ export function SearchFilters() {
                                 </option>
                             ))}
                         </select>
+                    </div>
+
+                    {/* 18+ Toggle */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">18+ Content</label>
+                        <button
+                            onClick={() => updateFilter("include_adult", includeAdult ? "" : "true")}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-md border transition-colors ${
+                                includeAdult 
+                                    ? "bg-red-500/20 border-red-500/50 text-red-400" 
+                                    : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10"
+                            }`}
+                        >
+                            <span className="text-sm">{includeAdult ? "On" : "Off"}</span>
+                            <div className={`relative w-10 h-5 rounded-full transition-colors ${
+                                includeAdult ? "bg-red-500" : "bg-gray-600"
+                            }`}>
+                                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                                    includeAdult ? "translate-x-5" : "translate-x-0.5"
+                                }`} />
+                            </div>
+                        </button>
                     </div>
 
                     {/* Clear */}

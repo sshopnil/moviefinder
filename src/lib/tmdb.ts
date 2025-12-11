@@ -144,6 +144,7 @@ export const movieService = {
         with_runtime_lte?: string;
         with_original_language?: string;
         region?: string;
+        include_adult?: string;
     }): Promise<Movie[]> => {
         // Remove undefined keys
         const params = Object.fromEntries(
