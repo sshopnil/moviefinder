@@ -69,7 +69,7 @@ export function SiteHeader({ user }: SiteHeaderProps) {
 
                     <Link
                         href="/"
-                        className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/80 hover:text-white transition-colors border border-white/5 hidden md:block"
+                        className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/80 hover:text-white transition-colors border border-white/5"
                         title="Home"
                     >
                         <Home className="h-5 w-5" />
