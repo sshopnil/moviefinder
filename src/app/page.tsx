@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
-import { getRecommendationsFromMood } from "@/lib/ai";
+import { getRecommendationsFromMood, getRecommendationsFromDescription } from "@/lib/ai";
 import { MovieBrowser } from "@/components/movie-browser";
 import { MovieSection } from "@/components/movie-section";
 import { Movie } from "@/types/movie";
@@ -20,6 +20,7 @@ export default async function Home(props: {
   const searchParams = await props.searchParams;
   const query = searchParams.q;
   const mood = searchParams.mood;
+  const description = searchParams.description;
 
   // Filters
   const with_genres = searchParams.with_genres;
@@ -27,6 +28,7 @@ export default async function Home(props: {
   const vote_average_gte = searchParams["vote_average.gte"];
   const with_original_language = searchParams.with_original_language;
   const region = searchParams.region;
+  const include_adult = searchParams.include_adult;
 
   let movies: Movie[] = [];
   let people: any[] = [];
@@ -115,7 +117,43 @@ export default async function Home(props: {
     } catch (e) {
       console.error(e);
     }
-  } else if (with_genres || primary_release_year || vote_average_gte || with_original_language || region) {
+  } else if (description) {
+    isSearchOrFilter = true;
+    viewTitle = `Matches for description: "${description}"`;
+    try {
+      const titles = await getRecommendationsFromDescription(description);
+      const results = await Promise.all(
+        titles.map((title: string) => movieService.searchMovies(title))
+      );
+      // Flatten and deduplicate
+      const allMovies = results.flatMap((r) => r);
+      // Basic dedup by ID
+      const seen = new Set();
+      movies = allMovies.filter(m => {
+        const duplicate = seen.has(m.id);
+        seen.add(m.id);
+        return !duplicate && m.poster_path; // Only show movies with posters for aesthetics
+      });
+
+      // Apply in-memory filters to AI results
+      if (with_genres) {
+        const genreId = parseInt(with_genres);
+        movies = movies.filter(m => m.genre_ids?.includes(genreId));
+      }
+      if (primary_release_year) {
+        movies = movies.filter(m => m.release_date?.startsWith(primary_release_year));
+      }
+      if (vote_average_gte) {
+        movies = movies.filter(m => m.vote_average >= parseFloat(vote_average_gte));
+      }
+      if (with_original_language) {
+        movies = movies.filter(m => m.original_language === with_original_language);
+      }
+
+    } catch (e) {
+      console.error(e);
+    }
+  } else if (with_genres || primary_release_year || vote_average_gte || with_original_language || region || include_adult) {
     isSearchOrFilter = true;
     viewTitle = "Filtered Results";
     try {
@@ -124,7 +162,8 @@ export default async function Home(props: {
         primary_release_year,
         "vote_average.gte": vote_average_gte,
         with_original_language,
-        region
+        region,
+        include_adult
       });
     } catch (e) {
       console.error(e);

@@ -1,7 +1,7 @@
 "use client";
 
 import { SearchBar } from "@/components/search-bar";
-import { MoodSelector } from "@/components/mood-selector";
+import { MoodSelector, SearchType } from "@/components/mood-selector";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -19,17 +19,18 @@ export function ClientHeader() {
         setTimeout(() => setSearchLoading(false), 2000);
     };
 
-    const handleMoodSubmit = (mood: string) => {
-        if (!mood.trim()) return;
+    const handleAISearch = (query: string, type: SearchType) => {
+        if (!query.trim()) return;
         setIsLoading(true);
-        router.push(`/?mood=${encodeURIComponent(mood)}`);
+        const param = type === 'mood' ? 'mood' : 'description';
+        router.push(`/?${param}=${encodeURIComponent(query)}`);
         setTimeout(() => setIsLoading(false), 2000);
     };
 
     return (
         <>
             <SearchBar onSearch={handleSearch} searchLoading={searchLoading} />
-            <MoodSelector onMoodSubmit={handleMoodSubmit} isLoading={isLoading} />
+            <MoodSelector onSearch={handleAISearch} isLoading={isLoading} />
         </>
     );
 }

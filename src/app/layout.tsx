@@ -6,7 +6,7 @@ import { AuthHeader } from "@/components/auth-header";
 import { WatchedProvider } from "@/components/watched-context";
 import { getWatchedIdsAction } from "@/actions/watchlist";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "MovieFinder AI",
@@ -25,7 +25,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} min-h-screen bg-background text-foreground antialiased selection:bg-white/20`}>
+      <body className={`${inter.variable} font-sans min-h-screen bg-background text-foreground antialiased selection:bg-white/20`}>
         <Providers>
           <div className="fixed inset-0 bg-[url('/noise.png')] opacity-[0.03] pointer-events-none mix-blend-overlay z-50"></div>
           <div className="fixed inset-0 bg-gradient-to-br from-purple-900/10 via-background to-blue-900/10 pointer-events-none -z-10"></div>

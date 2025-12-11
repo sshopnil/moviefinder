@@ -45,6 +45,44 @@ Example output:
     }
 }
 
+export async function getRecommendationsFromDescription(description: string) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+        console.warn("GROQ_API_KEY missing");
+        return ["Inception", "The Matrix", "Interstellar", "Memento", "Shutter Island"];
+    }
+
+    const groq = createOpenAI({
+        baseURL: 'https://api.groq.com/openai/v1',
+        apiKey,
+    });
+
+    try {
+        const { text } = await generateText({
+            model: groq("llama-3.3-70b-versatile"),
+            prompt: `Given the user's movie description: "${description}", suggest movies that match this plot, theme, or storyline.
+
+Instructions:
+1. Output only a valid JSON object with a single key "movies", mapping to an array of exactly 40 movie titles.
+2. Select movies that strongly match the described plot, premise, or vibe.
+3. Include a mix of popular hits and hidden gems.
+4. Do not include any commentary or explanation outside the JSON.
+
+Example output:
+{ "movies": ["The Matrix", "Ghost in the Shell", "Dark City", "...37 more"] }
+`,
+            maxRetries: 1,
+        });
+
+        const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanedText);
+        return Array.isArray(parsed.movies) ? parsed.movies : [];
+    } catch (error) {
+        console.error("AI Description Search Error:", error);
+        return ["Inception", "The Matrix", "Interstellar", "Memento", "Shutter Island"];
+    }
+}
+
 export async function getMovieVerdict(title: string, ratings: any, reviews: any[]) {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) return null;
