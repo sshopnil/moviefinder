@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { User, Home, Heart } from "lucide-react";
+import { User, Home, Heart, Github } from "lucide-react";
 import { HeaderSearchIcon } from "./header-search-icon";
 import { ProfileMenu } from "./profile-menu";
 import { cn } from "@/lib/utils";
@@ -38,16 +38,31 @@ export function SiteHeader({ user }: SiteHeaderProps) {
             )}
         >
             <div className="container mx-auto px-4 flex items-center justify-between">
-                {/* Logo - visible when scrolled or always? Let's make it always visible but subtle when top */}
-                <Link
-                    href="/"
-                    className={cn(
-                        "text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 transition-opacity duration-300",
-                        isScrolled ? "opacity-100" : "opacity-0 md:opacity-100" // Hide on mobile when at top to avoid clutter? or just keep it. Let's fade it in on scroll to avoid duplication with the big Hero logo on home
-                    )}
-                >
-                    MovieFinder
-                </Link>
+                <div className="flex items-center gap-4">
+                    <Link
+                        href="https://github.com/sshopnil/moviefinder"
+                        target="_blank"
+                        rel="noreferrer"
+                        className={cn(
+                            "text-white/80 hover:text-white transition-opacity duration-300",
+                            isScrolled ? "opacity-100" : "opacity-0 md:opacity-100"
+                        )}
+                        aria-label="View Source on GitHub"
+                    >
+                        <Github className="h-6 w-6" />
+                    </Link>
+
+                    {/* Logo - visible when scrolled or always? Let's make it always visible but subtle when top */}
+                    <Link
+                        href="/"
+                        className={cn(
+                            "text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400 transition-opacity duration-300",
+                            isScrolled ? "opacity-100" : "opacity-0 md:opacity-100" // Hide on mobile when at top to avoid clutter? or just keep it. Let's fade it in on scroll to avoid duplication with the big Hero logo on home
+                        )}
+                    >
+                        MovieFinder
+                    </Link>
+                </div>
 
                 <div className="flex items-center gap-4">
                     <HeaderSearchIcon />
@@ -80,6 +95,6 @@ export function SiteHeader({ user }: SiteHeaderProps) {
                     )}
                 </div>
             </div>
-        </header>
+        </header >
     );
 }
