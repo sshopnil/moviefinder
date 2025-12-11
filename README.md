@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MovieFinder
+
+MovieFinder is a modern, feature-rich web application designed to help users discover movies, get AI-powered recommendations based on their mood, and track their watchlist. Built with the latest web technologies, it offers a seamless and visually stunning experience.
+
+![MovieFinder](/public/logo.jpg)
+
+## Features
+
+-   **🎬 Movie Discovery**: Browse trending, top-rated, and categorized movies (e.g., Hollywood Hits, Korean Cinema, Japanese Gems).
+-   **🔍 Advanced Search**: Search for movies and people with real-time results and filtering (release year, genre, rating, language).
+-   **🧠 AI Mood Recommendations**: Describe your mood (e.g., "I want something inspiring and heartwarming") and get personalized movie suggestions powered by AI.
+-   **👤 User Accounts**: Sign up and log in to manage your profile.
+-   **❤️ Watchlist**: Save movies to your personal watchlist to keep track of what you want to see.
+-   **👁️ Watched Status**: Mark movies as watched and organize your viewing history.
+-   **📱 Responsive Design**: Fully optimized for desktop, tablet, and mobile devices with a sleek, dark-themed UI.
+
+## Tech Stack
+
+-   **Framework**: [Next.js 16](https://nextjs.org/) (App Router)
+-   **Language**: [TypeScript](https://www.typescriptlang.org/)
+-   **Styling**: [Tailwind CSS 4](https://tailwindcss.com/)
+-   **Database**: [MongoDB](https://www.mongodb.com/) with Mongoose
+-   **Authentication**: [NextAuth.js](https://next-auth.js.org/)
+-   **API Integration**: [TMDB API](https://www.themoviedb.org/documentation/api) for movie data
+-   **AI**: Google Generative AI / OpenAI for mood-based recommendations
+-   **Icons**: [Lucide React](https://lucide.dev/)
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+-   Node.js (v18 or higher)
+-   MongoDB instance (local or Atlas)
+-   TMDB API Key
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/sshopnil/moviefinder.git
+    cd moviefinder
+    ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2.  **Install dependencies**:
+    ```bash
+    npm install
+    # or
+    yarn install
+    ```
 
-## Learn More
+3.  **Environment Setup**:
+    Create a `.env` file in the root directory and add your environment variables:
+    ```env
+    MONGODB_URI=your_mongodb_connection_string
+    NEXTAUTH_SECRET=your_auth_secret
+    TMDB_API_KEY=your_tmdb_api_key
+    GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
+    # Add other necessary keys
+    ```
 
-To learn more about Next.js, take a look at the following resources:
+4.  **Run the development server**:
+    ```bash
+    npm run dev
+    ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+    Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Contributing
 
-## Deploy on Vercel
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is open source and available under the [MIT License](LICENSE).
