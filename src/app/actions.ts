@@ -2,7 +2,7 @@
 
 import { movieService } from "@/lib/tmdb";
 import { getRecommendationsFromMood } from "@/lib/ai";
-import { Movie, MovieDetails } from "@/types/movie";
+import { Movie, MovieDetails, AIRecommendation } from "@/types/movie";
 
 // Actions are async functions that run on the server
 
@@ -30,8 +30,8 @@ export async function getRecommendationsAction(mood: string): Promise<Movie[]> {
         if (!titles.length) return [];
 
         // Parallel fetch for details
-        const moviePromises = titles.map(async (title: string) => {
-            const results = await movieService.searchMovies(title);
+        const moviePromises = titles.map(async (rec: AIRecommendation) => {
+            const results = await movieService.searchMovies(rec.title);
             return results[0];
         });
 

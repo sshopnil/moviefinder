@@ -87,3 +87,10 @@ export interface MovieResponse {
     total_pages: number;
     total_results: number;
 }
+
+export interface AIRecommendation {
+    title: string;
+    type: "movie" | "tv";
+    reason: string;
+    relevance_score: number;
+}

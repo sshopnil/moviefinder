@@ -10,8 +10,8 @@ export async function toggleWatchlistAction(movie: {
     title: string;
     poster_path: string | null;
     vote_average: number;
-    release_date: string;
-    genre_ids: number[];
+    release_date?: string;
+    genre_ids?: number[];
 }) {
     const session = await auth();
     if (!session?.user?.id) {
@@ -67,8 +67,8 @@ export async function toggleWatchedAction(movie: {
     title: string;
     poster_path: string | null;
     vote_average: number;
-    release_date: string;
-    genre_ids: number[];
+    release_date?: string;
+    genre_ids?: number[];
 }) {
     const session = await auth();
     if (!session?.user?.id) {
