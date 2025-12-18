@@ -75,12 +75,13 @@ export function SearchFilters() {
     const currentGenre = searchParams.get("with_genres") || "";
     const currentYear = searchParams.get("primary_release_year") || "";
     const currentRating = searchParams.get("vote_average.gte") || "";
+    const currentType = searchParams.get("type") || "";
 
     return (
         <div className="mb-8">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors border ${isOpen || currentGenre || currentYear || currentRating
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors border ${isOpen || currentGenre || currentYear || currentRating || currentType
                     ? "bg-white text-black border-white"
                     : "bg-white/5 text-gray-300 border-white/10 hover:bg-white/10"
                     }`}
@@ -90,7 +91,20 @@ export function SearchFilters() {
             </button>
 
             {isOpen && (
-                <GlassCard className="mt-4 p-4 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 animate-in slide-in-from-top-2">
+                <GlassCard className="mt-4 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-2">
+                    {/* Type */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Type</label>
+                        <select
+                            value={searchParams.get("type") || ""}
+                            onChange={(e) => updateFilter("type", e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500 hover:bg-white/10 transition-colors"
+                        >
+                            <option value="" className="bg-gray-900">All Types</option>
+                            <option value="movie" className="bg-gray-900">Movies</option>
+                            <option value="tv" className="bg-gray-900">TV Series</option>
+                        </select>
+                    </div>
                     {/* Genre */}
                     <div className="space-y-1.5">
                         <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Genre</label>

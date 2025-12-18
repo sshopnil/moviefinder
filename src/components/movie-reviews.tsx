@@ -53,38 +53,38 @@ export async function MovieReviews({ id, title, releaseDate }: MovieReviewsProps
 
             {/* External Ratings (OMDb) */}
             {ratings && (
-                <GlassCard className="bg-gradient-to-br from-gray-900/50 to-black/50 border-white/10 p-6">
-                    <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
-                        <div className="space-y-2">
-                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                                <MonitorPlay className="h-5 w-5 text-purple-400" />
+                <GlassCard className="bg-gradient-to-br from-gray-900/50 to-black/50 border-white/10 p-4 sm:p-6 mt-4">
+                    <div className="flex flex-col md:flex-row gap-4 sm:gap-6 items-start md:items-center justify-between">
+                        <div className="space-y-1 sm:space-y-2">
+                            <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+                                <MonitorPlay className="h-4 sm:h-5 w-4 sm:w-5 text-purple-400" />
                                 External Ratings
-                            </h3>
+                            </h2>
                             {ratings.awards && (
-                                <p className="text-sm text-yellow-400 flex items-center gap-1.5">
-                                    <Trophy className="h-3 w-3" />
+                                <p className="text-[11px] sm:text-sm text-yellow-400 flex items-center gap-1.5 leading-tight">
+                                    <Trophy className="h-3 w-3 shrink-0" />
                                     {ratings.awards}
                                 </p>
                             )}
                         </div>
 
-                        <div className="flex gap-4 flex-wrap">
+                        <div className="flex gap-2 sm:gap-4 flex-wrap w-full md:w-auto">
                             {ratings.imdb && (
-                                <div className="flex flex-col items-center bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-xl min-w-[90px]">
-                                    <span className="text-yellow-500 font-bold text-xl">{ratings.imdb}</span>
-                                    <span className="text-[10px] text-yellow-500/80 uppercase tracking-wider font-medium">IMDb</span>
+                                <div className="flex flex-col items-center bg-yellow-500/10 border border-yellow-500/20 p-2 sm:p-3 rounded-xl min-w-[80px] sm:min-w-[90px] flex-1 sm:flex-none">
+                                    <span className="text-yellow-500 font-bold text-lg sm:text-xl">{ratings.imdb}</span>
+                                    <span className="text-[9px] sm:text-[10px] text-yellow-500/80 uppercase tracking-wider font-medium">IMDb</span>
                                 </div>
                             )}
                             {ratings.rottenTomatoes && (
-                                <div className="flex flex-col items-center bg-red-500/10 border border-red-500/20 p-3 rounded-xl min-w-[90px]">
-                                    <span className="text-red-500 font-bold text-xl">{ratings.rottenTomatoes}</span>
-                                    <span className="text-[10px] text-red-500/80 uppercase tracking-wider font-medium">Rotten Tomatoes</span>
+                                <div className="flex flex-col items-center bg-red-500/10 border border-red-500/20 p-2 sm:p-3 rounded-xl min-w-[80px] sm:min-w-[90px] flex-1 sm:flex-none">
+                                    <span className="text-red-500 font-bold text-lg sm:text-xl">{ratings.rottenTomatoes}</span>
+                                    <span className="text-[9px] sm:text-[10px] text-red-500/80 uppercase tracking-wider font-medium">Rotten</span>
                                 </div>
                             )}
                             {ratings.metacritic && (
-                                <div className="flex flex-col items-center bg-green-500/10 border border-green-500/20 p-3 rounded-xl min-w-[90px]">
-                                    <span className="text-green-500 font-bold text-xl">{ratings.metacritic}</span>
-                                    <span className="text-[10px] text-green-500/80 uppercase tracking-wider font-medium">Metascore</span>
+                                <div className="flex flex-col items-center bg-green-500/10 border border-green-500/20 p-2 sm:p-3 rounded-xl min-w-[80px] sm:min-w-[90px] flex-1 sm:flex-none">
+                                    <span className="text-green-500 font-bold text-lg sm:text-xl">{ratings.metacritic}</span>
+                                    <span className="text-[9px] sm:text-[10px] text-green-500/80 uppercase tracking-wider font-medium">Metascore</span>
                                 </div>
                             )}
                         </div>

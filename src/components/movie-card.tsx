@@ -1,44 +1,58 @@
 import { CardWatchedOverlay } from "@/components/card-watched-overlay";
-import { Movie } from "@/types/movie";
+import { Movie, TVSeries } from "@/types/movie";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
-import { Star } from "lucide-react";
+import { Star, PlayCircle } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 
 interface MovieCardProps {
-    movie: Movie;
+    movie: Movie | TVSeries;
 }
 
 export function MovieCard({ movie }: MovieCardProps) {
+    const isTV = 'name' in movie;
+    const title = isTV ? (movie as TVSeries).name : (movie as Movie).title;
+    const date = isTV ? (movie as TVSeries).first_air_date : (movie as Movie).release_date;
+    const href = isTV ? `/tv/${movie.id}` : `/movie/${movie.id}`;
+
     return (
-        <Link href={`/movie/${movie.id}`}>
+        <Link href={href} className="block w-full min-w-0">
             <div
-                className="group relative h-[400px] w-full cursor-pointer overflow-hidden rounded-xl bg-black/20"
+                className="group relative h-[260px] xs:h-[280px] sm:h-[400px] w-full cursor-pointer overflow-hidden rounded-xl bg-black/20 ring-1 ring-white/5 transition-all hover:ring-white/20"
             >
                 <Image
                     src={TMDB_IMAGE_URL.poster(movie.poster_path)}
-                    alt={movie.title}
+                    alt={title}
                     fill
-                    className="object-cover transition-transform duration-500 group-hover:scale-110"
-                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    className="object-cover transition-transform duration-700 group-hover:scale-105"
+                    sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
+                    priority={movie.popularity > 1000} // Prioritize popular items for faster LCP
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-60 transition-opacity duration-300 group-hover:opacity-80" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-60 transition-opacity duration-300 group-hover:opacity-90" />
 
-                <CardWatchedOverlay movie={movie} />
+                <CardWatchedOverlay movie={movie as any} />
 
-                <div className="absolute bottom-0 left-0 w-full p-4 translate-y-2 transition-transform duration-300 group-hover:translate-y-0">
-                    <h3 className="line-clamp-1 text-xl font-bold text-white mb-1">{movie.title}</h3>
-                    <div className="flex items-center justify-between text-sm text-gray-300">
-                        <span className="flex items-center gap-1">
-                            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                {/* Hover Play Icon */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 scale-90 transition-all duration-300 group-hover:opacity-100 group-hover:scale-100">
+                    <PlayCircle className="h-12 w-12 text-blue-500 fill-blue-500/20" />
+                </div>
+
+                <div className="absolute bottom-0 left-0 w-full p-4 transform transition-transform duration-300">
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white uppercase tracking-wider">
+                            {isTV ? 'TV' : 'Movie'}
+                        </span>
+                        <span className="flex items-center gap-0.5 text-xs font-semibold text-yellow-500">
+                            <Star className="h-3 w-3 fill-yellow-500" />
                             {movie.vote_average.toFixed(1)}
                         </span>
-                        <span>{movie.release_date ? new Date(movie.release_date).getFullYear() : 'N/A'}</span>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-xs text-gray-400 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                        {movie.overview}
-                    </p>
+                    <h3 className="line-clamp-1 text-sm sm:text-lg font-bold text-white group-hover:text-blue-400 transition-colors uppercase tracking-tight w-full truncate">{title}</h3>
+                    <div className="flex items-center justify-between text-[11px] text-gray-400 font-medium">
+                        <span>{date ? new Date(date).getFullYear() : 'N/A'}</span>
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">Click to View</span>
+                    </div>
                 </div>
             </div>
         </Link>

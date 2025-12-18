@@ -18,7 +18,7 @@ export function MovieGrid({ movies, title }: MovieGridProps) {
 
             <motion.div
                 layout
-                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+                className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6"
             >
                 <AnimatePresence mode="popLayout">
                     {movies.map((movie) => (

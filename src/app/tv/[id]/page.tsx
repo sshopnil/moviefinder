@@ -1,43 +1,40 @@
-import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
+import { tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BackButton } from "@/components/back-button";
-import { ArrowLeft, Calendar, Clock, Star } from "lucide-react";
+import { Calendar, Clock, Star, Tv } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
 import { getWatchlistStatusAction } from "@/actions/watchlist";
-import { Suspense } from "react";
-import { MediaGalleryLoader } from "@/components/media-gallery-loader";
-import { MediaGallerySkeleton } from "@/components/media-gallery-skeleton";
+import { MovieSection } from "@/components/movie-section";
 
-
-// Use generic 'params' type handling available in newer Next.js versions or simple awaitable
 type Props = {
     params: Promise<{ id: string }>;
 };
 
-export default async function MoviePage({ params }: Props) {
+export default async function TVPage({ params }: Props) {
     const { id } = await params;
 
     if (!id) return notFound();
 
-    let movie;
-
+    let tv;
+    let similar;
     let savedStatus = false;
     let watchedStatus = false;
 
     try {
-        movie = await movieService.getMovieDetails(parseInt(id));
+        tv = await tvService.getTVDetails(parseInt(id));
+        similar = await tvService.getSimilar(parseInt(id));
 
-        if (!movie) return notFound();
+        if (!tv) return notFound();
 
         // Log view
         logViewAction({
-            id: movie.id,
-            type: 'movie',
-            title: movie.title,
-            poster_path: movie.poster_path
+            id: tv.id,
+            type: 'tv' as const,
+            title: tv.name,
+            poster_path: tv.poster_path
         }).catch(e => console.error("Failed to log view:", e));
 
         const status = await getWatchlistStatusAction(parseInt(id));
@@ -50,16 +47,19 @@ export default async function MoviePage({ params }: Props) {
         return notFound();
     }
 
+    const totalRuntime = tv.episode_run_time?.[0] ? tv.episode_run_time[0] * tv.number_of_episodes : 0;
+
     return (
         <div className="min-h-screen relative">
             {/* Background Backdrop */}
             <div className="fixed inset-0 -z-10">
                 <Image
-                    src={TMDB_IMAGE_URL.backdrop(movie.backdrop_path)}
+                    src={TMDB_IMAGE_URL.backdrop(tv.backdrop_path)}
                     alt="backdrop"
                     fill
                     className="object-cover opacity-20 blur-sm"
                     priority
+                    unoptimized // Optimization for image loading
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
             </div>
@@ -71,40 +71,47 @@ export default async function MoviePage({ params }: Props) {
                     {/* Poster */}
                     <div className="relative aspect-[2/3] w-full max-w-[300px] rounded-xl overflow-hidden shadow-2xl mx-auto md:mx-0">
                         <Image
-                            src={TMDB_IMAGE_URL.poster(movie.poster_path)}
-                            alt={movie.title}
+                            src={TMDB_IMAGE_URL.poster(tv.poster_path)}
+                            alt={tv.name}
                             fill
                             className="object-cover"
                             priority
+                            sizes="(max-width: 768px) 100vw, 300px"
                         />
                     </div>
 
                     {/* Details */}
                     <div className="space-y-4 md:space-y-6 min-w-0">
                         <div>
-                            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-2 break-words leading-tight">{movie.title}</h1>
-                            <p className="text-lg md:text-xl text-gray-400 italic leading-snug">{movie.tagline}</p>
+                            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-2 break-words leading-tight">{tv.name}</h1>
+                            {tv.tagline && <p className="text-lg md:text-xl text-gray-400 italic leading-snug">{tv.tagline}</p>}
                         </div>
 
-                        <MovieActions movie={movie} isSaved={savedStatus} isWatched={watchedStatus} />
+                        <MovieActions movie={tv as any} isSaved={savedStatus} isWatched={watchedStatus} />
 
                         <div className="flex flex-wrap gap-2 sm:gap-4 text-xs sm:text-sm text-gray-300">
                             <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
                                 <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
-                                <span>{movie.vote_average.toFixed(1)}</span>
+                                <span>{tv.vote_average.toFixed(1)}</span>
                             </div>
                             <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
                                 <Calendar className="h-3.5 w-3.5 text-blue-400" />
-                                <span>{movie.release_date}</span>
+                                <span>{tv.first_air_date}</span>
                             </div>
                             <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
-                                <Clock className="h-3.5 w-3.5 text-green-400" />
-                                <span>{movie.runtime}m</span>
+                                <Tv className="h-3.5 w-3.5 text-purple-400" />
+                                <span>{tv.number_of_seasons}S • {tv.number_of_episodes}E</span>
                             </div>
+                            {tv.episode_run_time?.[0] && (
+                                <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
+                                    <Clock className="h-3.5 w-3.5 text-green-400" />
+                                    <span>{tv.episode_run_time[0]}m / Ep</span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                            {movie.genres.map((g: any) => (
+                            {tv.genres.map((g: any) => (
                                 <span key={g.id} className="px-3 py-1 rounded-full border border-white/10 text-xs text-gray-300">
                                     {g.name}
                                 </span>
@@ -113,19 +120,42 @@ export default async function MoviePage({ params }: Props) {
 
                         <div className="space-y-2">
                             <h3 className="text-lg font-semibold text-white">Overview</h3>
-                            <p className="text-gray-300 leading-relaxed">{movie.overview}</p>
+                            <p className="text-gray-300 leading-relaxed">{tv.overview}</p>
                         </div>
 
+                        {/* Seasons */}
                         <div className="space-y-4 pt-4 border-t border-white/10">
-                            <Suspense fallback={<MediaGallerySkeleton />}>
-                                <MediaGalleryLoader id={movie.id} />
-                            </Suspense>
+                            <h3 className="text-lg font-semibold text-white">Seasons</h3>
+                            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+                                {tv.seasons.map((season) => (
+                                    <div key={season.id} className="min-w-[150px] space-y-2 group">
+                                        <div className="relative aspect-[2/3] w-full rounded-lg overflow-hidden bg-white/5">
+                                            {season.poster_path ? (
+                                                <Image
+                                                    src={TMDB_IMAGE_URL.poster(season.poster_path)}
+                                                    alt={season.name}
+                                                    fill
+                                                    className="object-cover group-hover:scale-105 transition-transform"
+                                                    sizes="150px"
+                                                />
+                                            ) : (
+                                                <div className="flex items-center justify-center h-full text-xs text-gray-500 text-center p-2">No Poster</div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-white truncate">{season.name}</p>
+                                            <p className="text-xs text-gray-400">{season.episode_count} Episodes</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
+                        {/* Cast */}
                         <div className="space-y-4 pt-4 border-t border-white/10">
                             <h3 className="text-lg font-semibold text-white">Top Cast</h3>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                                {movie.cast.map((actor: any) => (
+                                {tv.cast.map((actor: any) => (
                                     <Link key={actor.id} href={`/person/${actor.id}`} className="text-center group block">
                                         <div className="relative w-full aspect-square rounded-full overflow-hidden mb-2 mx-auto max-w-[100px] bg-white/5 group-hover:ring-2 ring-white/20 transition-all">
                                             {actor.profile_path ? (
@@ -134,6 +164,7 @@ export default async function MoviePage({ params }: Props) {
                                                     alt={actor.name}
                                                     fill
                                                     className="object-cover group-hover:scale-110 transition-transform"
+                                                    sizes="100px"
                                                 />
                                             ) : (
                                                 <div className="flex items-center justify-center h-full text-xs text-gray-500">No Image</div>
@@ -145,14 +176,18 @@ export default async function MoviePage({ params }: Props) {
                                 ))}
                             </div>
                         </div>
-                        <div className="space-y-4 pt-4 border-t border-white/10">
-                            <MovieReviews id={movie.id} title={movie.title} />
-                        </div>
+
+                        {similar && similar.length > 0 && (
+                            <div className="pt-8 border-t border-white/10">
+                                <MovieSection
+                                    title="Similar Series"
+                                    movies={similar.map(s => ({ ...s, title: s.name, release_date: s.first_air_date } as any))}
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
         </div>
     );
 }
-
-import { MovieReviews } from "@/components/movie-reviews";

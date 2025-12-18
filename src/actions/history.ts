@@ -34,7 +34,7 @@ export async function logSearchAction(query: string) {
 
 export async function logViewAction(item: {
     id: number,
-    type: 'movie' | 'person',
+    type: 'movie' | 'person' | 'tv',
     title: string,
     poster_path: string | null
 }) {

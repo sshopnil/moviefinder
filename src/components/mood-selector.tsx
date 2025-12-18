@@ -27,18 +27,18 @@ export function MoodSelector({ onMoodSubmit, isLoading }: MoodSelectorProps) {
                     <h3 className="text-lg font-medium">Find by Mood (AI)</h3>
                 </div>
 
-                <form onSubmit={handleSubmit} className="flex gap-2">
+                <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
                     <input
                         type="text"
                         value={mood}
                         onChange={(e) => setMood(e.target.value)}
-                        placeholder="How are you feeling? (e.g., 'I want a mind-bending sci-fi that makes me think')"
-                        className="flex-1 px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-purple-500/50 transition-colors"
+                        placeholder="How are you feeling? (e.g., 'Mind-bending sci-fi')"
+                        className="flex-1 px-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:border-purple-500/50 transition-colors text-sm sm:text-base"
                     />
                     <button
                         type="submit"
                         disabled={isLoading || !mood.trim()}
-                        className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                        className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all active:scale-[0.98] whitespace-nowrap"
                     >
                         {isLoading ? "Thinking..." : "AI Search"}
                     </button>
