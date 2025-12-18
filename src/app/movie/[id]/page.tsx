@@ -1,7 +1,7 @@
 import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BackButton } from "@/components/back-button";
 import { ArrowLeft, Calendar, Clock, Star } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { logViewAction } from "@/actions/history";
@@ -59,6 +59,7 @@ export default async function MoviePage({ params }: Props) {
                     alt="backdrop"
                     fill
                     className="object-cover opacity-20 blur-sm"
+                    sizes="100vw"
                     priority
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
@@ -75,6 +76,7 @@ export default async function MoviePage({ params }: Props) {
                             alt={movie.title}
                             fill
                             className="object-cover"
+                            sizes="(max-width: 768px) 100vw, 300px"
                             priority
                         />
                     </div>
@@ -144,6 +146,7 @@ export default async function MoviePage({ params }: Props) {
                                                     alt={actor.name}
                                                     fill
                                                     className="object-cover group-hover:scale-110 transition-transform"
+                                                    sizes="100px"
                                                 />
                                             ) : (
                                                 <div className="flex items-center justify-center h-full text-xs text-gray-500">No Image</div>

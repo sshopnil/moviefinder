@@ -1,7 +1,7 @@
 
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { User, UserMinus } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import Link from "next/link";
 
 interface PersonCardProps {
@@ -23,6 +23,7 @@ export function PersonCard({ person }: PersonCardProps) {
                         alt={person.name}
                         fill
                         className="object-cover group-hover:scale-110 transition-transform duration-500"
+                        sizes="120px"
                     />
                 ) : (
                     <div className="flex items-center justify-center h-full text-gray-500 text-xs">No Image</div>

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { searchMultiAction } from "@/app/actions";
 import { Movie, TVSeries } from "@/types/movie";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -116,6 +116,7 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                                     alt={item.media_type === "movie" ? (item as Movie).title : (item as TVSeries).name}
                                     fill
                                     className="object-cover"
+                                    sizes="40px"
                                 />
                             </div>
                             <div className="flex-1 min-w-0 text-left">

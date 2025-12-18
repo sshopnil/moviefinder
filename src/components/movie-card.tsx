@@ -2,7 +2,7 @@ import { CardWatchedOverlay } from "@/components/card-watched-overlay";
 import { Movie, TVSeries } from "@/types/movie";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { Star, PlayCircle } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 
@@ -26,7 +26,7 @@ export function MovieCard({ movie }: MovieCardProps) {
                     alt={title}
                     fill
                     className="object-cover transition-transform duration-700 group-hover:scale-105"
-                    sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
+                    sizes="(max-width: 400px) 100vw, (max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
                     priority={movie.popularity > 1000} // Prioritize popular items for faster LCP
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent opacity-60 transition-opacity duration-300 group-hover:opacity-90" />

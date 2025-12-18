@@ -3,7 +3,7 @@
 import { Movie, TVSeries, AIRecommendation } from "@/types/movie";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { Star, PlayCircle, Users, Sparkles, Heart, Info, Quote } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 

@@ -3,7 +3,7 @@ import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { MovieBrowser } from "@/components/movie-browser";
 import { BackButton } from "@/components/back-button";
 import { MapPin, Calendar, Star, Instagram } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFavoriteActorStatusAction } from "@/actions/favorite-actors";
@@ -43,11 +43,12 @@ export default async function PersonPage({ params }: Props) {
                         <div className="relative aspect-[2/3] w-full max-w-[300px] rounded-xl overflow-hidden shadow-2xl mx-auto md:mx-0 bg-white/5">
                             {person.profile_path ? (
                                 <Image
-                                    src={TMDB_IMAGE_URL.profile(person.profile_path).replace("w185", "h632")} // Use larger image
+                                    src={TMDB_IMAGE_URL.profile(person.profile_path)}
                                     alt={person.name}
                                     fill
                                     className="object-cover"
                                     priority
+                                    sizes="(max-width: 768px) 100vw, 300px"
                                 />
                             ) : (
                                 <div className="flex items-center justify-center h-full text-gray-400">No Image</div>

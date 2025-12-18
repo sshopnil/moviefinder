@@ -1,7 +1,7 @@
 import { tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BackButton } from "@/components/back-button";
 import { Calendar, Clock, Star, Tv, Sparkles } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { logViewAction } from "@/actions/history";
@@ -73,7 +73,7 @@ export default async function TVPage({ params }: Props) {
                     fill
                     className="object-cover opacity-20 blur-sm"
                     priority
-                    unoptimized // Optimization for image loading
+                    sizes="100vw"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
             </div>

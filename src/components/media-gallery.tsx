@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useState, useCallback, useEffect } from "react";
@@ -39,7 +39,7 @@ function GalleryImage({ src, alt, className, priority = false }: { src: string, 
                     "object-cover transition-all duration-700",
                     isLoading ? "scale-110 blur-lg opacity-0" : "scale-100 blur-0 opacity-100"
                 )}
-                sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 priority={priority}
                 onLoad={() => setIsLoading(false)}
             />
@@ -86,6 +86,7 @@ function LightboxCarousel({ images, initialIndex, onClose }: LightboxProps) {
                                     className="object-contain drop-shadow-2xl"
                                     priority={index === initialIndex}
                                     quality={90}
+                                    sizes="100vw"
                                 />
                             </div>
                         </div>

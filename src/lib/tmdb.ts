@@ -5,9 +5,9 @@ const IMAGE_BASE_URL = "https://image.tmdb.org/t/p";
 import { Movie, MovieDetails, MovieResponse, TVSeries, TVDetails } from "@/types/movie";
 
 export const TMDB_IMAGE_URL = {
-    poster: (path: string | null) => path ? `${IMAGE_BASE_URL}/w500${path}` : "/placeholder-poster.png",
-    backdrop: (path: string | null) => path ? `${IMAGE_BASE_URL}/original${path}` : "/placeholder-backdrop.png",
-    profile: (path: string | null) => path ? `${IMAGE_BASE_URL}/w185${path}` : "/placeholder-profile.png",
+    poster: (path: string | null) => path ? `${IMAGE_BASE_URL}/poster${path}` : "/placeholder-poster.png",
+    backdrop: (path: string | null) => path ? `${IMAGE_BASE_URL}/backdrop${path}` : "/placeholder-backdrop.png",
+    profile: (path: string | null) => path ? `${IMAGE_BASE_URL}/profile${path}` : "/placeholder-profile.png",
 };
 
 async function fetchFromTMDB<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
