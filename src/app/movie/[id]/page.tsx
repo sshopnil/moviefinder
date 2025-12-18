@@ -101,6 +101,16 @@ export default async function MoviePage({ params }: Props) {
                                 <Clock className="h-3.5 w-3.5 text-green-400" />
                                 <span>{movie.runtime}m</span>
                             </div>
+                            {movie.imdb_id && (
+                                <a
+                                    href={`https://www.imdb.com/title/${movie.imdb_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1.5 bg-[#f5c518] px-3 py-1.5 rounded-full border border-[#f5c518] text-black font-bold hover:bg-[#e2b616] transition-colors"
+                                >
+                                    <span className="text-[10px]">IMDb</span>
+                                </a>
+                            )}
                         </div>
 
                         <div className="flex flex-wrap gap-2">

@@ -52,39 +52,33 @@ export const movieService = {
         return data.results.map(m => ({ ...m, media_type: "movie" }));
     },
 
-    searchMulti: async (query: string): Promise<{ movies: Movie[], tv: TVSeries[], people: any[] }> => {
-        if (!query) return { movies: [], tv: [], people: [] };
+    searchMulti: async (query: string, page: number = 1): Promise<{
+        movies: Movie[],
+        tv: TVSeries[],
+        people: any[],
+        total_pages: number,
+        total_results: number
+    }> => {
+        if (!query) return { movies: [], tv: [], people: [], total_pages: 0, total_results: 0 };
 
-        const maxPages = 5; // Reduced from 20 for faster initial search, can be increased if needed
-        const batchSize = 5;
-        const allResults: any[] = [];
+        const data = await fetchFromTMDB<{
+            results: any[],
+            total_pages: number,
+            total_results: number
+        }>("/search/multi", { query, page: page.toString() });
 
-        const pages = Array.from({ length: maxPages }, (_, i) => i + 1);
+        const results = data.results || [];
+        const movies = results.filter((item: any) => item.media_type === "movie") as Movie[];
+        const tv = results.filter((item: any) => item.media_type === "tv") as TVSeries[];
+        const people = results.filter((item: any) => item.media_type === "person");
 
-        for (let i = 0; i < pages.length; i += batchSize) {
-            const batch = pages.slice(i, i + batchSize);
-            const promises = batch.map(page =>
-                fetchFromTMDB<{ results: any[] }>("/search/multi", { query, page: page.toString() })
-                    .catch(() => ({ results: [] }))
-            );
-            const batchResults = await Promise.all(promises);
-            batchResults.forEach(r => {
-                if (r.results) allResults.push(...r.results);
-            });
-        }
-
-        const seen = new Set();
-        const uniqueResults = allResults.filter(item => {
-            const duplicate = seen.has(item.id);
-            seen.add(item.id);
-            return !duplicate;
-        });
-
-        const movies = uniqueResults.filter((item: any) => item.media_type === "movie") as Movie[];
-        const tv = uniqueResults.filter((item: any) => item.media_type === "tv") as TVSeries[];
-        const people = uniqueResults.filter((item: any) => item.media_type === "person");
-
-        return { movies, tv, people };
+        return {
+            movies,
+            tv,
+            people,
+            total_pages: data.total_pages,
+            total_results: data.total_results
+        };
     },
 
     searchMovies: async (query: string): Promise<Movie[]> => {
@@ -119,10 +113,11 @@ export const movieService = {
 
     getMovieDetails: async (id: number): Promise<MovieDetails> => {
         const data = await fetchFromTMDB<MovieDetails>(`/movie/${id}`, {
-            append_to_response: "credits,videos",
+            append_to_response: "credits,videos,external_ids",
         });
+        const imdb_id = (data as any).external_ids?.imdb_id || data.imdb_id;
         const cast = (data as any).credits?.cast?.slice(0, 10) || [];
-        return { ...data, cast, media_type: "movie" };
+        return { ...data, cast, imdb_id, media_type: "movie" };
     },
 
     getDiscover: async (filters: {
@@ -135,37 +130,19 @@ export const movieService = {
         with_original_language?: string;
         region?: string;
         sort_by?: string;
-    }): Promise<Movie[]> => {
+        page?: string;
+    }): Promise<{ results: Movie[], total_pages: number, total_results: number }> => {
         const params = Object.fromEntries(
             Object.entries(filters).filter(([_, v]) => v != null && v !== "")
         ) as Record<string, string>;
 
-        const maxPages = 5;
-        const batchSize = 5;
-        const allMovies: Movie[] = [];
+        const data = await fetchFromTMDB<MovieResponse>("/discover/movie", { ...params });
 
-        const pages = Array.from({ length: maxPages }, (_, i) => i + 1);
-
-        for (let i = 0; i < pages.length; i += batchSize) {
-            const batch = pages.slice(i, i + batchSize);
-            const promises = batch.map(page =>
-                fetchFromTMDB<MovieResponse>("/discover/movie", { ...params, page: page.toString() })
-                    .catch(() => ({ results: [] } as any))
-            );
-            const batchResults = await Promise.all(promises);
-            batchResults.forEach(r => {
-                if (r.results) allMovies.push(...r.results);
-            });
-        }
-
-        const seen = new Set();
-        const uniqueMovies = allMovies.filter(m => {
-            const duplicate = seen.has(m.id);
-            seen.add(m.id);
-            return !duplicate;
-        });
-
-        return uniqueMovies.map(m => ({ ...m, media_type: "movie" }));
+        return {
+            results: (data.results || []).map(m => ({ ...m, media_type: "movie" as const })),
+            total_pages: data.total_pages,
+            total_results: data.total_results
+        };
     },
 
     getMovieImages: async (id: number): Promise<{ backdrops: any[]; posters: any[] }> => {
@@ -203,10 +180,11 @@ export const tvService = {
 
     getTVDetails: async (id: number): Promise<TVDetails> => {
         const data = await fetchFromTMDB<TVDetails>(`/tv/${id}`, {
-            append_to_response: "credits,videos",
+            append_to_response: "credits,videos,external_ids",
         });
+        const imdb_id = (data as any).external_ids?.imdb_id;
         const cast = (data as any).credits?.cast?.slice(0, 10) || [];
-        return { ...data, cast, media_type: "tv" };
+        return { ...data, cast, imdb_id, media_type: "tv" };
     },
 
     searchTV: async (query: string): Promise<TVSeries[]> => {
@@ -222,13 +200,18 @@ export const tvService = {
         with_original_language?: string;
         sort_by?: string;
         region?: string;
-    }): Promise<TVSeries[]> => {
+        page?: string;
+    }): Promise<{ results: TVSeries[], total_pages: number, total_results: number }> => {
         const params = Object.fromEntries(
             Object.entries(filters).filter(([_, v]) => v != null && v !== "")
         ) as Record<string, string>;
 
         const data = await fetchFromTMDB<MovieResponse>("/discover/tv", params);
-        return data.results.map(s => ({ ...s, media_type: "tv" }));
+        return {
+            results: (data.results || []).map(s => ({ ...s, media_type: "tv" as const })),
+            total_pages: data.total_pages,
+            total_results: data.total_results
+        };
     },
 
     getSimilar: async (id: number): Promise<TVSeries[]> => {

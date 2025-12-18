@@ -11,6 +11,7 @@ import { SearchFilters } from "@/components/search-filters";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { logSearchAction } from "@/actions/history";
+import { Pagination } from "@/components/pagination";
 
 // Server Component
 export default async function Home(props: {
@@ -19,6 +20,7 @@ export default async function Home(props: {
   const searchParams = await props.searchParams;
   const query = searchParams.q;
   const mood = searchParams.mood;
+  const page = searchParams.page ? parseInt(searchParams.page) : 1;
 
   // Filters
   const type = searchParams.type;
@@ -33,6 +35,7 @@ export default async function Home(props: {
   let people: any[] = [];
   let viewTitle = "Trending Now";
   let isSearchOrFilter = false;
+  let totalPages = 1;
 
   let homeSections: {
     title: string;
@@ -46,17 +49,22 @@ export default async function Home(props: {
     isSearchOrFilter = true;
     viewTitle = `Results for "${query}"`;
     try {
-      const results = await movieService.searchMulti(query);
+      const results = await movieService.searchMulti(query, page);
       logSearchAction(query).catch(err => console.error("Failed to log search:", err));
 
       movies = results.movies;
       tv = results.tv;
       people = results.people;
+      totalPages = results.total_pages;
 
       if (type) {
         if (type === "movie") tv = [];
         if (type === "tv") movies = [];
       }
+
+      // Note: Filtering after fetching from TMDB might reduce results per page
+      // but TMDB doesn't support complex filtering in search_multi.
+      // For better results, if type is specified, we could use searchMovie/searchTV directly.
       if (with_genres) {
         const genreId = parseInt(with_genres);
         movies = movies.filter(m => m.genre_ids?.includes(genreId));
@@ -82,6 +90,7 @@ export default async function Home(props: {
     isSearchOrFilter = true;
     viewTitle = `AI Recommendations for "${mood}"`;
     try {
+      // AI Recommendations are usually small set, no pagination needed for now
       const recommendations = await getRecommendationsFromMood(mood);
       const results = await Promise.all(
         recommendations.map(async (rec) => {
@@ -124,20 +133,26 @@ export default async function Home(props: {
     viewTitle = "Filtered Results";
     try {
       if (!type || type === "movie") {
-        movies = await movieService.getDiscover({
+        const movieResults = await movieService.getDiscover({
           with_genres,
           primary_release_year,
           "vote_average.gte": vote_average_gte,
           with_original_language,
-          region
+          region,
+          page: page.toString()
         });
+        movies = movieResults.results;
+        totalPages = Math.max(totalPages, movieResults.total_pages);
       }
       if (!type || type === "tv") {
-        tv = await tvService.getDiscover({
+        const tvResults = await tvService.getDiscover({
           with_genres,
           "vote_average.gte": vote_average_gte,
-          with_original_language
+          with_original_language,
+          page: page.toString()
         });
+        tv = tvResults.results;
+        totalPages = Math.max(totalPages, tvResults.total_pages);
       }
     } catch (e) {
       console.error(e);
@@ -159,10 +174,10 @@ export default async function Home(props: {
       homeSections = [
         {
           title: "Anime Highlights",
-          items: animeSeries.slice(0, 12),
+          items: animeSeries.results.slice(0, 12),
           description: "Top Japanese Animation",
           viewAllLink: "/?with_genres=16&with_original_language=ja",
-          totalCount: animeSeries.length
+          totalCount: animeSeries.total_results
         },
         {
           title: "Trending Movies",
@@ -235,7 +250,10 @@ export default async function Home(props: {
           {isSearchOrFilter ? (
             <div className="space-y-12">
               {[...movies, ...tv].length > 0 ? (
-                <MovieGrid movies={[...movies, ...tv] as any} title={viewTitle} />
+                <>
+                  <MovieGrid movies={[...movies, ...tv] as any} title={viewTitle} />
+                  <Pagination currentPage={page} totalPages={totalPages} />
+                </>
               ) : (
                 <div className="text-center py-20 text-gray-500">
                   No results found. Try a different search.

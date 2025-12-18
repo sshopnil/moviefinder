@@ -108,6 +108,16 @@ export default async function TVPage({ params }: Props) {
                                     <span>{tv.episode_run_time[0]}m / Ep</span>
                                 </div>
                             )}
+                            {tv.imdb_id && (
+                                <a
+                                    href={`https://www.imdb.com/title/${tv.imdb_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1.5 bg-[#f5c518] px-3 py-1.5 rounded-full border border-[#f5c518] text-black font-bold hover:bg-[#e2b616] transition-colors"
+                                >
+                                    <span className="text-[10px]">IMDb</span>
+                                </a>
+                            )}
                         </div>
 
                         <div className="flex flex-wrap gap-2">

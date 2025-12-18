@@ -24,6 +24,15 @@ export async function searchMoviesAction(query: string): Promise<Movie[]> {
     }
 }
 
+export async function searchMultiAction(query: string, page: number = 1) {
+    try {
+        return await movieService.searchMulti(query, page);
+    } catch (error) {
+        console.error("Failed to multi search:", error);
+        return { movies: [], tv: [], people: [], total_pages: 0, total_results: 0 };
+    }
+}
+
 export async function getRecommendationsAction(mood: string): Promise<Movie[]> {
     try {
         const titles = await getRecommendationsFromMood(mood);

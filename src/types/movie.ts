@@ -37,6 +37,7 @@ export interface MovieDetails extends Movie {
     runtime: number;
     tagline: string;
     cast: Cast[];
+    imdb_id?: string;
     videos: { results: Video[] };
 }
 
@@ -47,6 +48,7 @@ export interface TVDetails extends TVSeries {
     number_of_seasons: number;
     tagline: string;
     cast: Cast[];
+    imdb_id?: string;
     videos: { results: Video[] };
     seasons: Season[];
 }
