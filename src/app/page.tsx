@@ -30,8 +30,8 @@ export default async function Home(props: {
   const with_original_language = searchParams.with_original_language;
   const region = searchParams.region;
 
-  let movies: Movie[] = [];
-  let tv: TVSeries[] = [];
+  let movies: (Movie & { aiMeta?: any })[] = [];
+  let tv: (TVSeries & { aiMeta?: any })[] = [];
   let people: any[] = [];
   let viewTitle = "Trending Now";
   let isSearchOrFilter = false;
@@ -94,17 +94,26 @@ export default async function Home(props: {
       const recommendations = await getRecommendationsFromMood(mood);
       const results = await Promise.all(
         recommendations.map(async (rec) => {
+          let movieData: any = null;
           if (rec.type === "movie") {
             const matches = await movieService.searchMovies(rec.title);
-            return matches[0] ? { ...matches[0], media_type: "movie" as const } : null;
+            movieData = matches[0] ? { ...matches[0], media_type: "movie" as const } : null;
           } else {
             const matches = await tvService.searchTV(rec.title);
-            return matches[0] ? { ...matches[0], media_type: "tv" as const } : null;
+            movieData = matches[0] ? { ...matches[0], media_type: "tv" as const } : null;
           }
+
+          if (movieData) {
+            return {
+              ...movieData,
+              aiMeta: rec
+            };
+          }
+          return null;
         })
       );
 
-      const items = results.filter(Boolean) as (Movie | TVSeries)[];
+      const items = results.filter(Boolean) as ((Movie | TVSeries) & { aiMeta?: any })[];
       const seen = new Set();
       const uniqueItems = items.filter(item => {
         const duplicate = seen.has(`${item.media_type}-${item.id}`);
@@ -119,11 +128,11 @@ export default async function Home(props: {
 
       if (with_genres) {
         const genreId = parseInt(with_genres);
-        movies = (filteredItems.filter(i => i.media_type === "movie") as Movie[]).filter(m => m.genre_ids?.includes(genreId));
-        tv = (filteredItems.filter(i => i.media_type === "tv") as TVSeries[]).filter(s => s.genre_ids?.includes(genreId));
+        movies = filteredItems.filter(i => i.media_type === "movie" && i.genre_ids?.includes(genreId)) as any;
+        tv = filteredItems.filter(i => i.media_type === "tv" && i.genre_ids?.includes(genreId)) as any;
       } else {
-        movies = filteredItems.filter(i => i.media_type === "movie") as Movie[];
-        tv = filteredItems.filter(i => i.media_type === "tv") as TVSeries[];
+        movies = filteredItems.filter(i => i.media_type === "movie") as any;
+        tv = filteredItems.filter(i => i.media_type === "tv") as any;
       }
     } catch (e) {
       console.error(e);

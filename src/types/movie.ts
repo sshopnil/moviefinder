@@ -95,4 +95,9 @@ export interface AIRecommendation {
     type: "movie" | "tv";
     reason: string;
     relevance_score: number;
+    target_audience: string;
+    why_watch: string;
+    ending_mood: string;
+    emotional_impact: string;
+    critics_consensus: string;
 }

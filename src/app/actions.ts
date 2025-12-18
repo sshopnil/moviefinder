@@ -1,8 +1,8 @@
 "use server";
 
-import { movieService } from "@/lib/tmdb";
-import { getRecommendationsFromMood } from "@/lib/ai";
-import { Movie, MovieDetails, AIRecommendation } from "@/types/movie";
+import { movieService, tvService } from "@/lib/tmdb";
+import { getRecommendationsFromMood, getShowRecommendations, getSeasonRanking } from "@/lib/ai";
+import { Movie, MovieDetails, AIRecommendation, TVSeries } from "@/types/movie";
 
 // Actions are async functions that run on the server
 
@@ -49,5 +49,47 @@ export async function getRecommendationsAction(mood: string): Promise<Movie[]> {
     } catch (error) {
         console.error("Failed to get AI recommendations:", error);
         return [];
+    }
+}
+
+export async function getShowRecommendationsAction(showTitle: string, overview: string, genres: string[]): Promise<any[]> {
+    try {
+        const recommendations = await getShowRecommendations(showTitle, overview, genres);
+        if (!recommendations.length) return [];
+
+        const results = await Promise.all(
+            recommendations.map(async (rec: any) => {
+                let movieData: any = null;
+                if (rec.type === "movie") {
+                    const matches = await movieService.searchMovies(rec.title);
+                    movieData = matches[0] ? { ...matches[0], media_type: "movie" as const } : null;
+                } else {
+                    const matches = await tvService.searchTV(rec.title);
+                    movieData = matches[0] ? { ...matches[0], media_type: "tv" as const } : null;
+                }
+
+                if (movieData) {
+                    return {
+                        ...movieData,
+                        aiMeta: rec
+                    };
+                }
+                return null;
+            })
+        );
+
+        return results.filter(Boolean);
+    } catch (error) {
+        console.error("Failed to get show recommendations:", error);
+        return [];
+    }
+}
+
+export async function getSeasonRankingAction(showTitle: string, seasons: any[]) {
+    try {
+        return await getSeasonRanking(showTitle, seasons);
+    } catch (error) {
+        console.error("Failed to get season ranking:", error);
+        return null;
     }
 }

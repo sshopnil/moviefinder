@@ -1,15 +1,18 @@
 "use client";
 
-import { Movie } from "@/types/movie";
+import { Movie, TVSeries, AIRecommendation } from "@/types/movie";
 import { MovieCard } from "@/components/movie-card";
+import { AIRecommendationCard } from "@/components/ai-recommendation-card";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface MovieGridProps {
-    movies: Movie[];
+    movies: ((Movie | TVSeries) & { aiMeta?: AIRecommendation })[];
     title: string;
 }
 
 export function MovieGrid({ movies, title }: MovieGridProps) {
+    const hasAIRecommendations = movies.some(m => m.aiMeta);
+
     return (
         <section className="flex-1 mt-8">
             <div className="flex items-center justify-between mb-6">
@@ -18,7 +21,10 @@ export function MovieGrid({ movies, title }: MovieGridProps) {
 
             <motion.div
                 layout
-                className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6"
+                className={`grid gap-4 sm:gap-6 ${hasAIRecommendations
+                        ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+                        : "grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+                    }`}
             >
                 <AnimatePresence mode="popLayout">
                     {movies.map((movie) => (
@@ -29,7 +35,11 @@ export function MovieGrid({ movies, title }: MovieGridProps) {
                             exit={{ opacity: 0, scale: 0.9 }}
                             transition={{ duration: 0.2 }}
                         >
-                            <MovieCard movie={movie} />
+                            {movie.aiMeta ? (
+                                <AIRecommendationCard movie={movie} />
+                            ) : (
+                                <MovieCard movie={movie} />
+                            )}
                         </motion.div>
                     ))}
                 </AnimatePresence>

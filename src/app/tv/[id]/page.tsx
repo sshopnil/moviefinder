@@ -1,6 +1,6 @@
 import { tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BackButton } from "@/components/back-button";
-import { Calendar, Clock, Star, Tv } from "lucide-react";
+import { Calendar, Clock, Star, Tv, Sparkles } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,6 +8,9 @@ import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
 import { getWatchlistStatusAction } from "@/actions/watchlist";
 import { MovieSection } from "@/components/movie-section";
+import { getShowRecommendationsAction, getSeasonRankingAction } from "@/app/actions";
+import { SeasonRanking } from "@/components/season-ranking";
+import { AIRecommendationCard } from "@/components/ai-recommendation-card";
 
 type Props = {
     params: Promise<{ id: string }>;
@@ -22,12 +25,23 @@ export default async function TVPage({ params }: Props) {
     let similar;
     let savedStatus = false;
     let watchedStatus = false;
+    let aiRecs: any[] = [];
+    let seasonRankings: any[] = [];
 
     try {
         tv = await tvService.getTVDetails(parseInt(id));
         similar = await tvService.getSimilar(parseInt(id));
 
         if (!tv) return notFound();
+
+        // Fetch AI data in parallel
+        const [recs, rankings] = await Promise.all([
+            getShowRecommendationsAction(tv.name, tv.overview, tv.genres.map(g => g.name)),
+            getSeasonRankingAction(tv.name, tv.seasons)
+        ]);
+
+        aiRecs = recs;
+        seasonRankings = rankings || [];
 
         // Log view
         logViewAction({
@@ -133,9 +147,31 @@ export default async function TVPage({ params }: Props) {
                             <p className="text-gray-300 leading-relaxed">{tv.overview}</p>
                         </div>
 
-                        {/* Seasons */}
+                        {/* Season Ranking */}
+                        {seasonRankings && seasonRankings.length > 0 && (
+                            <div className="pt-8 border-t border-white/10">
+                                <SeasonRanking rankings={seasonRankings} seasons={tv.seasons} />
+                            </div>
+                        )}
+
+                        {/* AI Suggestions */}
+                        {aiRecs && aiRecs.length > 0 && (
+                            <div className="pt-8 border-t border-white/10">
+                                <div className="flex items-center gap-2 mb-6">
+                                    <Sparkles className="h-5 w-5 text-blue-400" />
+                                    <h3 className="text-2xl font-bold text-white">AI Recommends</h3>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {aiRecs.map((rec) => (
+                                        <AIRecommendationCard key={rec.id} movie={rec} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Seasons Horizontal List */}
                         <div className="space-y-4 pt-4 border-t border-white/10">
-                            <h3 className="text-lg font-semibold text-white">Seasons</h3>
+                            <h3 className="text-lg font-semibold text-white">All Seasons</h3>
                             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
                                 {tv.seasons.map((season) => (
                                     <div key={season.id} className="min-w-[150px] space-y-2 group">
