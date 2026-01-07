@@ -94,7 +94,7 @@ export default async function Home(props: {
       // AI Recommendations are usually small set, no pagination needed for now
       const recommendations = await getRecommendationsFromMood(mood);
       const results = await Promise.all(
-        recommendations.map(async (rec) => {
+        recommendations.map(async (rec: any) => {
           let movieData: any = null;
           if (rec.type === "movie") {
             const matches = await movieService.searchMovies(rec.title);

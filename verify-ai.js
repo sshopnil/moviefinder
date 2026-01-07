@@ -1,3 +1,7 @@
+// This file is disabled because @langchain/google-genai caused dependency conflicts and was removed.
+// The main application uses @langchain/groq.
+
+/*
 const { ChatGoogleGenerativeAI } = require("@langchain/google-genai");
 const fs = require('fs');
 const path = require('path');
@@ -57,3 +61,5 @@ async function verifyGemini() {
 }
 
 verifyGemini();
+*/
+console.log("This script is disabled.");
