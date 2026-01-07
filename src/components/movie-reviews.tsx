@@ -1,9 +1,10 @@
 
 import { movieService } from "@/lib/tmdb";
 import { getExternalRatings } from "@/lib/omdb";
-import { getMovieVerdict } from "@/lib/ai";
-import { Star, MessageSquare, Trophy, MonitorPlay, Sparkles } from "lucide-react";
+import { getMovieInsights } from "@/lib/ai";
+import { Star, MessageSquare, Trophy, MonitorPlay, Sparkles, User, Heart, Zap, Quote } from "lucide-react";
 import { GlassCard } from "./ui/glass-card";
+import { ExpandableText } from "./ui/expandable-text";
 
 interface MovieReviewsProps {
     id: number;
@@ -20,10 +21,10 @@ export async function MovieReviews({ id, title, releaseDate }: MovieReviewsProps
         getExternalRatings(title, year)
     ]);
 
-    // Get AI Verdict
-    const verdict = await getMovieVerdict(title, ratings, tmdbReviews);
+    // Get AI Insights (with Caching)
+    const insights = await getMovieInsights(id, title, ratings, tmdbReviews);
 
-    if (tmdbReviews.length === 0 && !ratings) {
+    if (tmdbReviews.length === 0 && !ratings && !insights) {
         return null;
     }
 
@@ -34,26 +35,63 @@ export async function MovieReviews({ id, title, releaseDate }: MovieReviewsProps
                 Reviews & Reception
             </h2>
 
-            {/* AI Verdict */}
-            {verdict && (
-                <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/20 p-6 shadow-lg transform transition-all hover:scale-[1.01]">
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Sparkles className="h-24 w-24 text-white" />
-                    </div>
-                    <div className="relative z-10">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Sparkles className="h-5 w-5 text-indigo-400 animate-pulse" />
-                            <span className="text-sm font-bold text-indigo-300 uppercase tracking-wider">AI Recommendation</span>
+            {/* AI Insights */}
+            {insights && (
+                <div className="grid gap-6 md:grid-cols-1">
+                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/20 p-6 shadow-lg transform transition-all hover:scale-[1.01]">
+                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                            <Sparkles className="h-24 w-24 text-white" />
                         </div>
-                        <h3 className="text-3xl font-extrabold text-white mb-2">{verdict.verdict}</h3>
-                        <p className="text-lg text-gray-200 italic">"{verdict.reason}"</p>
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Sparkles className="h-5 w-5 text-indigo-400 animate-pulse" />
+                                <span className="text-sm font-bold text-indigo-300 uppercase tracking-wider">AI Verdict</span>
+                            </div>
+                            <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-2">{insights.verdict}</h3>
+                            <p className="text-lg text-gray-200 italic mb-6">"{insights.reason}"</p>
+
+                            <div className="grid sm:grid-cols-3 gap-4 pt-4 border-t border-white/10">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-indigo-300 mb-1">
+                                        <User className="h-4 w-4" />
+                                        <span className="text-xs font-bold uppercase tracking-wider">For Whom</span>
+                                    </div>
+                                    <p className="text-sm text-gray-300 font-medium leading-normal">{insights.for_whom}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-pink-300 mb-1">
+                                        <Heart className="h-4 w-4" />
+                                        <span className="text-xs font-bold uppercase tracking-wider">Feeling</span>
+                                    </div>
+                                    <p className="text-sm text-gray-300 font-medium leading-normal">{insights.feeling}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 text-amber-300 mb-1">
+                                        <Zap className="h-4 w-4" />
+                                        <span className="text-xs font-bold uppercase tracking-wider">Ending Vibe</span>
+                                    </div>
+                                    <p className="text-sm text-gray-300 font-medium leading-normal">{insights.ending_vibe}</p>
+                                </div>
+                            </div>
+
+                            {/* Critics Consensus */}
+                            {insights.critics_consensus && (
+                                <div className="mt-6 pt-4 border-t border-white/10">
+                                    <div className="flex items-center gap-2 text-emerald-300 mb-2">
+                                        <Quote className="h-4 w-4" />
+                                        <span className="text-xs font-bold uppercase tracking-wider">Critics Consensus</span>
+                                    </div>
+                                    <ExpandableText text={insights.critics_consensus} maxLines={3} />
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
 
             {/* External Ratings (OMDb) */}
             {ratings && (
-                <GlassCard className="bg-gradient-to-br from-gray-900/50 to-black/50 border-white/10 p-4 sm:p-6 mt-4">
+                <GlassCard className="bg-gradient-to-br from-gray-900/50 to-black/50 border-white/10 p-4 sm:p-6">
                     <div className="flex flex-col md:flex-row gap-4 sm:gap-6 items-start md:items-center justify-between">
                         <div className="space-y-1 sm:space-y-2">
                             <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">

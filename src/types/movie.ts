@@ -81,6 +81,7 @@ export interface Video {
     name: string;
     site: string;
     type: string;
+    type_name?: string; // Optional alias for type to avoid conflicts if needed
 }
 
 export interface MovieResponse {
@@ -99,5 +100,14 @@ export interface AIRecommendation {
     why_watch: string;
     ending_mood: string;
     emotional_impact: string;
+    critics_consensus: string;
+}
+
+export interface MovieInsights {
+    verdict: string;
+    reason: string;
+    for_whom: string;
+    feeling: string;
+    ending_vibe: string;
     critics_consensus: string;
 }

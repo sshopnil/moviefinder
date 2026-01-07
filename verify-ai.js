@@ -1,25 +1,26 @@
+const { ChatGoogleGenerativeAI } = require("@langchain/google-genai");
 const fs = require('fs');
 const path = require('path');
 
+// Mock loadEnv to get keys
 function loadEnv() {
     let envContent = '';
+    const envPath = path.resolve(process.cwd(), '.env');
     try {
-        envContent = fs.readFileSync(path.resolve(process.cwd(), '.env.local'), 'utf8');
+        envContent = fs.readFileSync(envPath, 'utf8');
     } catch (e) {
-        try {
-            envContent = fs.readFileSync(path.resolve(process.cwd(), '.env'), 'utf8');
-        } catch (e2) {
-            console.error("Could not read .env or .env.local");
-            return {};
-        }
+        console.error("Could not read .env at", envPath);
+        return {};
     }
-
     const env = {};
-    envContent.split('\n').forEach(line => {
-        const match = line.match(/^([^=]+)=(.*)$/);
+    const lines = envContent.split(/\r?\n/);
+    lines.forEach(line => {
+        const match = line.match(/^\s*([^=]+)\s*=\s*(.*)?$/);
         if (match) {
             const key = match[1].trim();
-            const value = match[2].trim().replace(/^["']|["']$/g, '');
+            let value = match[2] ? match[2].trim() : '';
+            if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+            else if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
             env[key] = value;
         }
     });
@@ -30,38 +31,29 @@ const env = loadEnv();
 const apiKey = env.GEMINI_API_KEY;
 
 if (!apiKey) {
-    console.error("GEMINI_API_KEY not found in .env or .env.local");
+    console.error("❌ GEMINI_API_KEY missing");
     process.exit(1);
 }
 
-async function listModels() {
-    console.log("Checking available models with key:", apiKey.substring(0, 5) + "...");
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-
+async function verifyGemini() {
+    console.log("🚀 Verifying Gemini 1.5 Flash Integration...");
     try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error(`HTTP Error: ${response.status} ${response.statusText}`);
-            const text = await response.text();
-            console.error("Response:", text);
-            return;
-        }
+        console.log(`🔑 Key found: ${apiKey.substring(0, 5)}...`);
 
-        const data = await response.json();
+        // Try 'model' instead of 'modelName'
+        const model = new ChatGoogleGenerativeAI({
+            apiKey: apiKey,
+            model: "gemini-1.5-flash", // Changed from modelName
+            temperature: 0.7,
+        });
 
-        if (data.models) {
-            console.log("\nAvailable Models for generateContent:");
-            data.models.forEach(m => {
-                if (m.supportedGenerationMethods.includes('generateContent')) {
-                    console.log(`- ${m.name}`);
-                }
-            });
-        } else {
-            console.log("No models found. Response:", data);
-        }
+        console.log("📤 Sending test prompt...");
+        const response = await model.invoke("Suggest one movie. Return only the title.");
+        console.log("✅ Success! Response:", response.content);
     } catch (error) {
-        console.error("Fetch error:", error);
+        console.error("❌ Verification Failed with Error:");
+        console.error(error);
     }
 }
 
-listModels();
+verifyGemini();
