@@ -34,17 +34,28 @@ if (!apiKey) {
 process.env.GOOGLE_GENERATIVE_AI_API_KEY = apiKey;
 
 async function verifyGeminiSDK() {
-    console.log("🚀 Verifying Gemini Flash via AI SDK...");
-    try {
-        const { text } = await generateText({
-            model: google("gemini-flash-latest"),
-            prompt: "Suggest one movie title.",
-        });
-        console.log("✅ Success! Response:", text);
-    } catch (error) {
-        console.error("❌ Verification Failed:", error);
-        console.dir(error, { depth: null });
+    console.log("🚀 Verifying Gemini Models via AI SDK...");
+    const models = [
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash-exp"
+    ];
+
+    for (const modelId of models) {
+        console.log(`\nTesting model: ${modelId}`);
+        try {
+            const { text } = await generateText({
+                model: google(modelId),
+                prompt: "Suggest one movie title.",
+            });
+            console.log(`✅ Success with ${modelId}! Response:`, text);
+            return; // Exit on first success
+        } catch (error) {
+            console.log(`❌ Failed with ${modelId}:`, error.message || error);
+            // console.dir(error, { depth: null });
+        }
     }
+    console.log("All models failed.");
 }
 
 verifyGeminiSDK();

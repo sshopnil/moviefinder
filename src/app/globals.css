@@ -4,22 +4,22 @@
   /* Charcoal Theme Palette */
   --background: #121212;
   --foreground: #ffffff;
-  
+
   --muted: #1e1e1e;
   --muted-foreground: #a0a0a0;
-  
+
   --card: rgba(30, 30, 30, 0.6);
   --card-foreground: #ffffff;
-  
+
   --popover: #1e1e1e;
   --popover-foreground: #ffffff;
-  
+
   --border: rgba(255, 255, 255, 0.1);
   --input: rgba(255, 255, 255, 0.1);
-  
+
   --primary: #ffffff;
   --primary-foreground: #121212;
-  
+
   --radius: 0.5rem;
 }
 
@@ -66,4 +66,16 @@ body {
   backdrop-filter: blur(4px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: white;
+}
+
+/* Hide Scrollbar Utilities */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
 }

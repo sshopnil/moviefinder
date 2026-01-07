@@ -2,6 +2,7 @@
 
 import { SearchBar } from "@/components/search-bar";
 import { MoodSelector } from "@/components/mood-selector";
+import { BrainLoader } from "@/components/brain-loader";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -30,6 +31,7 @@ export function ClientHeader() {
         <>
             <SearchBar onSearch={handleSearch} searchLoading={searchLoading} />
             <MoodSelector onMoodSubmit={handleMoodSubmit} isLoading={isLoading} />
+            {isLoading && <BrainLoader />}
         </>
     );
 }

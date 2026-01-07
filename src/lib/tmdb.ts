@@ -217,5 +217,10 @@ export const tvService = {
     getSimilar: async (id: number): Promise<TVSeries[]> => {
         const data = await fetchFromTMDB<MovieResponse>(`/tv/${id}/similar`);
         return data.results.map(s => ({ ...s, media_type: "tv" }));
+    },
+
+    getTVReviews: async (id: number): Promise<any[]> => {
+        const data = await fetchFromTMDB<{ results: any[] }>(`/tv/${id}/reviews`);
+        return data.results || [];
     }
 };

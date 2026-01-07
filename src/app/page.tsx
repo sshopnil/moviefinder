@@ -10,6 +10,7 @@ import { ClientHeader } from "@/components/client-header";
 import { SearchFilters } from "@/components/search-filters";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
+import { BrainLoader } from "@/components/brain-loader";
 import { logSearchAction } from "@/actions/history";
 import { Pagination } from "@/components/pagination";
 
@@ -251,11 +252,7 @@ export default async function Home(props: {
           </div>
         )}
 
-        <Suspense fallback={
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-10 w-10 text-white animate-spin" />
-          </div>
-        }>
+        <Suspense fallback={<BrainLoader />}>
           {isSearchOrFilter ? (
             <div className="space-y-12">
               {[...movies, ...tv].length > 0 ? (

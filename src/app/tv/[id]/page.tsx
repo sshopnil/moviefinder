@@ -7,10 +7,12 @@ import { notFound } from "next/navigation";
 import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
 import { getWatchlistStatusAction } from "@/actions/watchlist";
-import { MovieSection } from "@/components/movie-section";
-import { getShowRecommendationsAction, getSeasonRankingAction } from "@/app/actions";
+import { getSeasonRankingAction } from "@/app/actions";
+import { Suspense } from "react";
 import { SeasonRanking } from "@/components/season-ranking";
-import { AIRecommendationCard } from "@/components/ai-recommendation-card";
+import { TVReviews } from "@/components/tv-reviews";
+import { SimilarMedia } from "@/components/similar-media";
+import { BrainLoader } from "@/components/brain-loader";
 
 type Props = {
     params: Promise<{ id: string }>;
@@ -22,26 +24,17 @@ export default async function TVPage({ params }: Props) {
     if (!id) return notFound();
 
     let tv;
-    let similar;
     let savedStatus = false;
     let watchedStatus = false;
-    let aiRecs: any[] = [];
     let seasonRankings: any[] = [];
 
     try {
         tv = await tvService.getTVDetails(parseInt(id));
-        similar = await tvService.getSimilar(parseInt(id));
 
         if (!tv) return notFound();
 
-        // Fetch AI data in parallel
-        const [recs, rankings] = await Promise.all([
-            getShowRecommendationsAction(tv.name, tv.overview, tv.genres.map(g => g.name)),
-            getSeasonRankingAction(tv.name, tv.seasons)
-        ]);
-
-        aiRecs = recs;
-        seasonRankings = rankings || [];
+        // Fetch ranking in parallel
+        seasonRankings = await getSeasonRankingAction(tv.name, tv.seasons) || [];
 
         // Log view
         logViewAction({
@@ -60,8 +53,6 @@ export default async function TVPage({ params }: Props) {
         console.error(e);
         return notFound();
     }
-
-    const totalRuntime = tv.episode_run_time?.[0] ? tv.episode_run_time[0] * tv.number_of_episodes : 0;
 
     return (
         <div className="min-h-screen relative">
@@ -154,21 +145,6 @@ export default async function TVPage({ params }: Props) {
                             </div>
                         )}
 
-                        {/* AI Suggestions */}
-                        {aiRecs && aiRecs.length > 0 && (
-                            <div className="pt-8 border-t border-white/10">
-                                <div className="flex items-center gap-2 mb-6">
-                                    <Sparkles className="h-5 w-5 text-blue-400" />
-                                    <h3 className="text-2xl font-bold text-white">AI Recommends</h3>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {aiRecs.map((rec) => (
-                                        <AIRecommendationCard key={rec.id} movie={rec} />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
                         {/* Seasons Horizontal List */}
                         <div className="space-y-4 pt-4 border-t border-white/10">
                             <h3 className="text-lg font-semibold text-white">All Seasons</h3>
@@ -223,14 +199,24 @@ export default async function TVPage({ params }: Props) {
                             </div>
                         </div>
 
-                        {similar && similar.length > 0 && (
-                            <div className="pt-8 border-t border-white/10">
-                                <MovieSection
-                                    title="Similar Series"
-                                    movies={similar.map(s => ({ ...s, title: s.name, release_date: s.first_air_date } as any))}
+                        {/* TV Reviews (AI Verdict & Reception) */}
+                        <div className="space-y-4 pt-4 border-t border-white/10">
+                            <Suspense fallback={<BrainLoader />}>
+                                <TVReviews id={tv.id} title={tv.name} firstAirDate={tv.first_air_date} />
+                            </Suspense>
+                        </div>
+
+                        {/* Similar Series (Live AI Recommendations) */}
+                        <div className="space-y-4 pt-4 border-t border-white/10">
+                            <Suspense fallback={<BrainLoader />}>
+                                <SimilarMedia
+                                    title={tv.name}
+                                    overview={tv.overview}
+                                    genres={tv.genres.map((g: any) => g.name)}
+                                    type="tv"
                                 />
-                            </div>
-                        )}
+                            </Suspense>
+                        </div>
                     </div>
                 </div>
             </div>

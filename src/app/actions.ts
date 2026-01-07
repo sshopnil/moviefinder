@@ -1,7 +1,7 @@
 "use server";
 
 import { movieService, tvService } from "@/lib/tmdb";
-import { getRecommendationsFromMood, getShowRecommendations, getSeasonRanking } from "@/lib/ai";
+import { getRecommendationsFromMood, getShowRecommendations, getSeasonRanking, getSimilarContent } from "@/lib/ai";
 import { Movie, MovieDetails, AIRecommendation, TVSeries } from "@/types/movie";
 
 // Actions are async functions that run on the server
@@ -91,5 +91,39 @@ export async function getSeasonRankingAction(showTitle: string, seasons: any[]) 
     } catch (error) {
         console.error("Failed to get season ranking:", error);
         return null;
+    }
+}
+
+export async function getSimilarContentAction(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'movie'): Promise<any[]> {
+    try {
+        const recommendations = await getSimilarContent(title, overview, genres, type);
+        if (!recommendations.length) return [];
+
+        // Hydrate with TMDB data
+        const results = await Promise.all(
+            recommendations.map(async (rec: any) => {
+                let mediaData: any = null;
+                if (rec.type === "movie") {
+                    const matches = await movieService.searchMovies(rec.title);
+                    mediaData = matches[0] ? { ...matches[0], media_type: "movie" as const } : null;
+                } else {
+                    const matches = await tvService.searchTV(rec.title);
+                    mediaData = matches[0] ? { ...matches[0], media_type: "tv" as const } : null;
+                }
+
+                if (mediaData) {
+                    return {
+                        ...mediaData,
+                        aiMeta: rec
+                    };
+                }
+                return null;
+            })
+        );
+
+        return results.filter(Boolean);
+    } catch (error) {
+        console.error("Failed to get similar content:", error);
+        return [];
     }
 }

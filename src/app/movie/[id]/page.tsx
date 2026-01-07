@@ -10,6 +10,9 @@ import { getWatchlistStatusAction } from "@/actions/watchlist";
 import { Suspense } from "react";
 import { MediaGalleryLoader } from "@/components/media-gallery-loader";
 import { MediaGallerySkeleton } from "@/components/media-gallery-skeleton";
+import { MovieReviews } from "@/components/movie-reviews";
+import { SimilarMedia } from "@/components/similar-media";
+import { BrainLoader } from "@/components/brain-loader";
 
 
 // Use generic 'params' type handling available in newer Next.js versions or simple awaitable
@@ -159,7 +162,20 @@ export default async function MoviePage({ params }: Props) {
                             </div>
                         </div>
                         <div className="space-y-4 pt-4 border-t border-white/10">
-                            <MovieReviews id={movie.id} title={movie.title} />
+                            <Suspense fallback={<BrainLoader />}>
+                                <MovieReviews id={movie.id} title={movie.title} releaseDate={movie.release_date} />
+                            </Suspense>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-white/10">
+                            <Suspense fallback={<BrainLoader />}>
+                                <SimilarMedia
+                                    title={movie.title}
+                                    overview={movie.overview}
+                                    genres={movie.genres.map((g: any) => g.name)}
+                                    type="movie"
+                                />
+                            </Suspense>
                         </div>
                     </div>
                 </div>
@@ -167,5 +183,3 @@ export default async function MoviePage({ params }: Props) {
         </div>
     );
 }
-
-import { MovieReviews } from "@/components/movie-reviews";
