@@ -40,6 +40,7 @@ export function WatchlistButton({ movie, initialIsSaved }: WatchlistButtonProps)
                 vote_average: movie.vote_average,
                 release_date: movie.release_date || '',
                 genre_ids: movie.genre_ids || [],
+                media_type: (movie.media_type === "tv" || movie.media_type === "movie") ? movie.media_type : "movie",
             });
 
             if (result.error) {

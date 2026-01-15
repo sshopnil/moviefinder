@@ -21,6 +21,11 @@ const WatchlistSchema = new mongoose.Schema(
             type: Boolean,
             default: false
         },
+        media_type: {
+            type: String,
+            enum: ["movie", "tv"],
+            default: "movie"
+        }
     },
     { timestamps: true }
 );

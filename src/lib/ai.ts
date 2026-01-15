@@ -5,8 +5,8 @@ import { z } from "zod";
 import AICache from "@/models/AICache";
 import dbConnect from "@/lib/db";
 
-// Using Groq Compound
-const MODEL_NAME = "groq/compound";
+// Using Llama 3.1 8B Instant (Best balance of speed/cost/quality)
+const MODEL_NAME = "llama-3.1-8b-instant";
 
 async function getCachedData(key: string) {
     try {
@@ -40,12 +40,86 @@ async function setCachedData(key: string, data: any) {
     }
 }
 
+function normalizeMediaType(type: string): "movie" | "tv" {
+    const t = type.toLowerCase().trim();
+    if (t === "movie" || t === "film") return "movie";
+    return "tv"; // Default to TV for "anime", "series", "show", etc.
+}
+
+function normalizeScore(score: number): number {
+    // If score is tiny (e.g. 0.85), assume 0-1 scale -> 85
+    if (score <= 1) return Math.round(score * 100);
+    // If score is small (e.g. 9.5), assume 0-10 scale -> 95
+    if (score <= 10) return Math.round(score * 10);
+    // Cap at 100 and round
+    if (score > 100) return 100;
+    return Math.round(score);
+}
+
+/**
+ * Helper to clean AI output and extract JSON
+ * Llama-3.1-8b-instant often chats or includes markdown code blocks.
+ */
+function cleanLLMOutput(text: string): string {
+    // 1. Remove markdown code blocks like ```json ... ```
+    let clean = text.replace(/```json/g, "").replace(/```/g, "");
+
+    // 2. Find all top-level JSON blocks using brace counting
+    const blocks: string[] = [];
+    let braceCount = 0;
+    let startIndex = -1;
+
+    for (let i = 0; i < clean.length; i++) {
+        if (clean[i] === '{') {
+            if (braceCount === 0) startIndex = i;
+            braceCount++;
+        } else if (clean[i] === '}') {
+            braceCount--;
+            if (braceCount === 0 && startIndex !== -1) {
+                blocks.push(clean.substring(startIndex, i + 1));
+                startIndex = -1;
+            }
+        }
+    }
+
+    // 3. Select the best block
+    // Filter out blocks that look like schemas (contain "$schema" or "type": "object" at root)
+    const validBlocks = blocks.filter(b => !b.includes('"$schema"') && !b.includes('"type": "object"'));
+
+    if (validBlocks.length > 0) {
+        // Return the last valid block (usually the answer after reasoning/schema)
+        return validBlocks[validBlocks.length - 1];
+    }
+
+    // Fallback: If no "valid" blocks found (maybe schema check was too aggressive), return the last block found
+    if (blocks.length > 0) {
+        return blocks[blocks.length - 1];
+    }
+
+    // 4. Attempt to fix common JSON errors (missing commas)
+    // Regex looks for: end of value (quote, digit, bool) -> newline -> start of key
+    const fixed = clean.replace(/(["\d]|true|false|null)\s*\n\s*("[a-zA-Z0-9_]+":)/g, '$1,\n$2');
+
+    // Re-check block logic with fixed string if needed, but usually applying to the extracted block is best.
+    // Let's apply it to the chosen block.
+
+    let bestBlock = clean;
+    if (validBlocks.length > 0) {
+        bestBlock = validBlocks[validBlocks.length - 1];
+    } else if (blocks.length > 0) {
+        bestBlock = blocks[blocks.length - 1];
+    }
+
+    // Apply fix to the best block
+    return bestBlock.replace(/(["\d]|true|false|null)\s*\n\s*("[a-zA-Z0-9_]+":)/g, '$1,\n$2');
+}
+
 export async function getRecommendationsFromMood(mood: string) {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) return [];
 
-    // 1. Caching
-    const cacheKey = `ai_mood_recs_v3_${mood.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
+    // 1. Caching (Bumped to v4 to invalidate old non-normalized scores)
+    const cacheKey = `ai_mood_recs_v4_${mood.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
@@ -57,30 +131,31 @@ export async function getRecommendationsFromMood(mood: string) {
 
     const recommendationSchema = z.object({
         recommendations: z.array(z.object({
+
             title: z.string(),
-            type: z.enum(["movie", "tv"]),
-            reason: z.string().describe("1-sentence reason why this matches the mood"),
-            relevance_score: z.number().min(0).max(100).describe("How well it matches the mood (0-100)"),
-            target_audience: z.string().describe("Who this movie/show is primarily for"),
-            why_watch: z.string().describe("A compelling 1-sentence reason to watch it"),
-            ending_mood: z.string().describe("The mood this will leave the viewer in"),
-            emotional_impact: z.string().describe("How the viewer will feel"),
-            critics_consensus: z.string().describe("A brief summary of what critics generally say")
+            type: z.string(), // Relaxed from enum to prevent crashes
+            reason: z.string().describe("Brief reason"),
+            relevance_score: z.number().describe("Score (0-100)"),
+            target_audience: z.string().describe("Audience"),
+            why_watch: z.string().describe("Why watch"),
+            ending_mood: z.string().describe("Ending vibe"),
+            emotional_impact: z.string().describe("Feeling"),
+            critics_consensus: z.string().describe("Brief consensus summary")
         })).min(1).max(10)
     });
 
     const parser = StructuredOutputParser.fromZodSchema(recommendationSchema);
 
     const prompt = new PromptTemplate({
-        template: `You are an expert movie and TV series connoisseur. 
-        Given the user's current mood or query: "{mood}", suggest a ranked list of exactly 10 movies and TV series.
-
-        STRICT INSTRUCTIONS:
-        1. BE LITERAL & SPECIFIC.
-        2. VIBE MATCHING.
-        3. AVOID GENERIC HITS.
-        4. MIX GLOBAL & FORMATS.
-        5. RANKING: Rank purely by relevance to the "{mood}" query.
+        template: `Suggest 10 movies/TV shows for mood: "{mood}".
+        
+        CRITICAL:
+        1. Specific, not generic.
+        2. Vibe match.
+        3. Mix global/formats.
+        4. Sort by relevance.
+        5. Score between 0 and 100.
+        6. VALID JSON ONLY (Check commas!).
         
         Return the results in the following JSON format:
         {format_instructions}`,
@@ -92,15 +167,11 @@ export async function getRecommendationsFromMood(mood: string) {
         const input = await prompt.format({ mood });
         const response = await model.invoke(input);
 
-        let text = response.content as string;
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            text = jsonMatch[0];
-        }
-
-        const parsed = await parser.parse(text);
+        const cleaned = cleanLLMOutput(response.content as string);
+        const parsed = await parser.parse(cleaned);
 
         const sorted = parsed.recommendations
+            .map(rec => ({ ...rec, type: normalizeMediaType(rec.type), relevance_score: normalizeScore(rec.relevance_score) }))
             .sort((a, b) => b.relevance_score - a.relevance_score)
             .slice(0, 10);
 
@@ -116,7 +187,7 @@ export async function getMovieInsights(id: number | string, title: string, ratin
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) return null;
 
-    const cacheKey = `movie_insights_v2_${id}`;
+    const cacheKey = `movie_insights_v3_${id}`;
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
@@ -129,10 +200,10 @@ export async function getMovieInsights(id: number | string, title: string, ratin
     const insightsSchema = z.object({
         verdict: z.string(),
         reason: z.string(),
-        for_whom: z.string().describe("Target audience description"),
-        feeling: z.string().describe("Emotional impact of the movie"),
-        ending_vibe: z.string().describe("The mood at the end of the movie"),
-        critics_consensus: z.string().describe("A detailed paragraph summarizing critical reception (approx 4-5 sentences)")
+        for_whom: z.string().describe("Audience"),
+        feeling: z.string().describe("Emotion"),
+        ending_vibe: z.string(),
+        critics_consensus: z.string().describe("Brief summary")
     });
 
     const parser = StructuredOutputParser.fromZodSchema(insightsSchema);
@@ -142,12 +213,11 @@ export async function getMovieInsights(id: number | string, title: string, ratin
         const reviewsSummary = reviews.slice(0, 5).map((r: any) => r.content.substring(0, 200)).join(" | ");
 
         const prompt = new PromptTemplate({
-            template: `Analyze the reception for the title "{title}".
+            template: `Analyze "{title}".
             Ratings: {ratingsSummary}
-            User Reviews Snippets: {reviewsSummary}
+            Reviews: {reviewsSummary}
 
-            Based on this, act as a witty movie buff friend. 
-            Provide: Verdict, Reason, For Whom, Feeling, Ending Vibe, Critics Consensus.
+            Act as a witty friend. Provide verdict, reason, audience, feeling, ending, consensus.
             
             {format_instructions}`,
             inputVariables: ["title", "ratingsSummary", "reviewsSummary"],
@@ -157,13 +227,8 @@ export async function getMovieInsights(id: number | string, title: string, ratin
         const input = await prompt.format({ title, ratingsSummary, reviewsSummary });
         const response = await model.invoke(input);
 
-        let text = response.content as string;
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            text = jsonMatch[0];
-        }
-
-        const parsed = await parser.parse(text);
+        const cleaned = cleanLLMOutput(response.content as string);
+        const parsed = await parser.parse(cleaned);
 
         await setCachedData(cacheKey, parsed);
         return parsed;
@@ -184,7 +249,7 @@ export async function getSimilarContent(title: string, overview: string, genres:
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) return [];
 
-    const cacheKey = `ai_similar_${type}_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const cacheKey = `ai_similar_v2_${type}_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
@@ -197,29 +262,29 @@ export async function getSimilarContent(title: string, overview: string, genres:
     const recommendationSchema = z.object({
         recommendations: z.array(z.object({
             title: z.string(),
-            type: z.enum(["movie", "tv"]),
+            type: z.string(), // Relaxed from enum
             reason: z.string(),
             target_audience: z.string(),
             why_watch: z.string(),
             ending_mood: z.string(),
             emotional_impact: z.string(),
             critics_consensus: z.string(),
-            relevance_score: z.number().min(0).max(100).describe("Percentage of match (0-100). Should be high (80-100) for good recommendations.")
+            relevance_score: z.number().describe("Match % (0-100)")
         }))
     });
 
     const parser = StructuredOutputParser.fromZodSchema(recommendationSchema);
 
     const prompt = new PromptTemplate({
-        template: `The user is currently executing a detailed deep dive into the {type} "{title}".
+        template: `Deep dive: {type} "{title}".
         Overview: {overview}
         Genres: {genres}
 
-        Suggest exactly 10 similar movies or TV series that a fan of this would ABSOLUTELY LOVE.
-        Focus on matching the specific *vibe*, *tone*, and *emotional impact*.
+        Suggest 10 similar items.
+        Match VIBE/TONE.
         
-        CRITICAL: Do NOT include "{title}" in the recommendations.
-        IMPORTANT: Assign a 'relevance_score' between 85 and 100 for these top recommendations.
+        CRITICAL: NO "{title}".
+        Score 85-100.
         
         {format_instructions}`,
         inputVariables: ["type", "title", "overview", "genres"],
@@ -230,16 +295,13 @@ export async function getSimilarContent(title: string, overview: string, genres:
         const input = await prompt.format({ type, title, overview, genres: genres.join(", ") });
         const response = await model.invoke(input);
 
-        let text = response.content as string;
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            text = jsonMatch[0];
-        }
+        const cleaned = cleanLLMOutput(response.content as string);
+        const parsed = await parser.parse(cleaned);
 
-        const parsed = await parser.parse(text);
 
         const sorted = parsed.recommendations
             .filter(r => r.title.toLowerCase() !== title.toLowerCase())
+            .map(rec => ({ ...rec, type: normalizeMediaType(rec.type), relevance_score: normalizeScore(rec.relevance_score) }))
             .sort((a, b) => b.relevance_score - a.relevance_score);
 
         await setCachedData(cacheKey, sorted);
@@ -254,7 +316,7 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) return null;
 
-    const cacheKey = `tv_ranking_${showTitle.toLowerCase().replace(/\s+/g, '_')}`;
+    const cacheKey = `tv_ranking_v2_${showTitle.toLowerCase().replace(/\s+/g, '_')}`;
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
@@ -282,9 +344,9 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
         const seasonsInfo = seasons.map(s => `Season ${s.season_number}: ${s.name} - ${s.overview}`).join("\n");
 
         const prompt = new PromptTemplate({
-            template: `For the TV show "{showTitle}", rank the following seasons from best to worst based on overall quality.
+            template: `Rank seasons of "{showTitle}" best to worst.
             
-            Seasons to rank:
+            Seasons:
             {seasonsInfo}
             
             {format_instructions}`,
@@ -295,13 +357,8 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
         const input = await prompt.format({ showTitle, seasonsInfo });
         const response = await model.invoke(input);
 
-        let text = response.content as string;
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            text = jsonMatch[0];
-        }
-
-        const parsed = await parser.parse(text);
+        const cleaned = cleanLLMOutput(response.content as string);
+        const parsed = await parser.parse(cleaned);
 
         const sorted = parsed.rankings.sort((a, b) => a.rank - b.rank);
         await setCachedData(cacheKey, sorted);

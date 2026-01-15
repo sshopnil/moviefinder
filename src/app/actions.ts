@@ -45,7 +45,8 @@ export async function getRecommendationsAction(mood: string): Promise<Movie[]> {
         });
 
         const movies = (await Promise.all(moviePromises)).filter(Boolean);
-        return movies;
+        // Deduplicate
+        return Array.from(new Map(movies.map(m => [m.id, m])).values());
     } catch (error) {
         console.error("Failed to get AI recommendations:", error);
         return [];
@@ -78,7 +79,9 @@ export async function getShowRecommendationsAction(showTitle: string, overview: 
             })
         );
 
-        return results.filter(Boolean);
+        const validResults = results.filter(Boolean);
+        // Deduplicate
+        return Array.from(new Map(validResults.map(item => [item.id, item])).values());
     } catch (error) {
         console.error("Failed to get show recommendations:", error);
         return [];
@@ -121,7 +124,9 @@ export async function getSimilarContentAction(title: string, overview: string, g
             })
         );
 
-        return results.filter(Boolean);
+        const validResults = results.filter(Boolean);
+        // Deduplicate
+        return Array.from(new Map(validResults.map(item => [item.id, item])).values());
     } catch (error) {
         console.error("Failed to get similar content:", error);
         return [];

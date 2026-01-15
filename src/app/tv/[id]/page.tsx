@@ -1,9 +1,9 @@
-import { tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
+import { tvService, movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BackButton } from "@/components/back-button";
 import { Calendar, Clock, Star, Tv, Sparkles } from "lucide-react";
 import Image from "@/components/ui/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
 import { getWatchlistStatusAction } from "@/actions/watchlist";
@@ -50,6 +50,18 @@ export default async function TVPage({ params }: Props) {
             watchedStatus = status.isWatched;
         }
     } catch (e) {
+        // Attempt to find if it's a Movie (handling broken legacy watchlist links)
+        let movieCheck = null;
+        try {
+            movieCheck = await movieService.getMovieDetails(parseInt(id));
+        } catch (innerError) {
+            // Ignore API (404) errors for movie check
+        }
+
+        if (movieCheck) {
+            redirect(`/movie/${id}`);
+        }
+
         console.error(e);
         return notFound();
     }

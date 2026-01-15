@@ -12,6 +12,7 @@ export async function toggleWatchlistAction(movie: {
     vote_average: number;
     release_date?: string;
     genre_ids?: number[];
+    media_type?: "movie" | "tv";
 }) {
     const session = await auth();
     if (!session?.user?.id) {
@@ -54,6 +55,7 @@ export async function toggleWatchlistAction(movie: {
             release_date: movie.release_date,
             genre_ids: movie.genre_ids,
             watched: false,
+            media_type: movie.media_type || "movie", // Default to movie if not provided
         });
         revalidatePath("/watchlist");
         revalidatePath("/dashboard");
@@ -69,6 +71,7 @@ export async function toggleWatchedAction(movie: {
     vote_average: number;
     release_date?: string;
     genre_ids?: number[];
+    media_type?: "movie" | "tv";
 }) {
     const session = await auth();
     if (!session?.user?.id) {
@@ -97,6 +100,7 @@ export async function toggleWatchedAction(movie: {
             release_date: movie.release_date,
             genre_ids: movie.genre_ids,
             watched: true,
+            media_type: movie.media_type || "movie",
         });
     }
 
@@ -133,23 +137,29 @@ export async function getWatchlistAction() {
 
     const watchlist = await Watchlist.find({ userId: session.user.id }).sort({ createdAt: -1 });
 
-    return watchlist.map(item => ({
-        id: item.movieId,
-        title: item.title,
-        poster_path: item.poster_path,
-        vote_average: item.vote_average,
-        release_date: item.release_date,
-        genre_ids: item.genre_ids || [],
-        adult: false,
-        backdrop_path: "",
-        original_language: "en",
-        original_title: item.title,
-        overview: "",
-        popularity: 0,
-        video: false,
-        vote_count: 0,
-        watched: item.watched || false
-    }));
+    return watchlist.map(item => {
+        const isTV = item.media_type === "tv";
+        return {
+            id: item.movieId,
+            title: !isTV ? item.title : undefined,
+            name: isTV ? item.title : undefined, // Map title to name for TV
+            media_type: item.media_type || "movie",
+            poster_path: item.poster_path,
+            vote_average: item.vote_average,
+            release_date: !isTV ? item.release_date : undefined,
+            first_air_date: isTV ? item.release_date : undefined, // Map release_date to first_air_date for TV
+            genre_ids: item.genre_ids || [],
+            adult: false,
+            backdrop_path: "",
+            original_language: "en",
+            original_title: item.title,
+            overview: "",
+            popularity: 0,
+            video: false,
+            vote_count: 0,
+            watched: item.watched || false
+        };
+    });
 }
 
 
@@ -176,23 +186,30 @@ export async function getUserWatchlistAction() {
     const watchlist = await Watchlist.find({ userId: session.user.id }).sort({ createdAt: -1 });
 
     // Transform to Movie-like shape if needed, strictly speaking the schema matches close enough for display
-    return watchlist.map(item => ({
-        id: item.movieId,
-        title: item.title,
-        poster_path: item.poster_path,
-        vote_average: item.vote_average,
-        release_date: item.release_date,
-        // Add fake fields to match Movie interface if strictly required by TS components
-        adult: false,
-        backdrop_path: "",
-        genre_ids: [],
-        original_language: "en",
-        original_title: item.title,
-        overview: "",
-        popularity: 0,
-        video: false,
-        vote_count: 0
-    }));
+    // Transform to Movie-like shape if needed, strictly speaking the schema matches close enough for display
+    return watchlist.map(item => {
+        const isTV = item.media_type === "tv";
+        return {
+            id: item.movieId,
+            title: !isTV ? item.title : undefined,
+            name: isTV ? item.title : undefined,
+            media_type: item.media_type || "movie",
+            poster_path: item.poster_path,
+            vote_average: item.vote_average,
+            release_date: !isTV ? item.release_date : undefined,
+            first_air_date: isTV ? item.release_date : undefined,
+            // Add fake fields to match Movie interface if strictly required by TS components
+            adult: false,
+            backdrop_path: "",
+            genre_ids: [],
+            original_language: "en",
+            original_title: item.title,
+            overview: "",
+            popularity: 0,
+            video: false,
+            vote_count: 0
+        };
+    });
 }
 
 export async function getWatchlistGenresAction() {

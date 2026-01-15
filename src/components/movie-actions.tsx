@@ -27,6 +27,7 @@ export function MovieActions({ movie, isSaved, isWatched }: MovieActionsProps) {
         title: title || 'Unknown',
         release_date: releaseDate || '',
         genre_ids: movie.genre_ids || (movie as any).genres?.map((g: any) => g.id) || [],
+        media_type: isTV ? 'tv' as const : 'movie' as const,
     };
 
     return (
@@ -75,6 +76,7 @@ function WatchedButton({ movie, initialIsWatched }: { movie: any, initialIsWatch
                     vote_average: movie.vote_average,
                     release_date: movie.release_date,
                     genre_ids: movie.genre_ids || [],
+                    media_type: movie.media_type,
                 });
 
                 if (result?.watched !== undefined) {

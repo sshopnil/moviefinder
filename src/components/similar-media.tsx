@@ -27,7 +27,11 @@ export function SimilarMedia({ title, overview, genres, type }: SimilarMediaProp
             try {
                 const results = await getSimilarContentAction(title, overview, genres, type);
                 if (mounted) {
-                    setRecommendations(results);
+                    // Deduplicate results based on ID
+                    const uniqueResults = results.filter((item, index, self) =>
+                        index === self.findIndex((t) => t.id === item.id)
+                    );
+                    setRecommendations(uniqueResults);
                     setLoading(false);
                 }
             } catch (error) {
