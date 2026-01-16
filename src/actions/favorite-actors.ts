@@ -14,7 +14,13 @@ interface ActorData {
 }
 
 export async function toggleFavoriteActorAction(actor: ActorData) {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in toggleFavoriteActorAction:", error);
+        throw new Error("Authentication failed");
+    }
     if (!session?.user?.id) {
         throw new Error("Unauthorized");
     }
@@ -46,7 +52,13 @@ export async function toggleFavoriteActorAction(actor: ActorData) {
 }
 
 export async function getFavoriteActorsAction() {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in getFavoriteActorsAction:", error);
+        return [];
+    }
     if (!session?.user?.id) return [];
 
     await connectToDatabase();
@@ -62,7 +74,13 @@ export async function getFavoriteActorsAction() {
 }
 
 export async function getFavoriteActorStatusAction(actorId: number) {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in getFavoriteActorStatusAction:", error);
+        return false;
+    }
     if (!session?.user?.id) return false;
 
     await connectToDatabase();

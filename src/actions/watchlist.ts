@@ -14,7 +14,13 @@ export async function toggleWatchlistAction(movie: {
     genre_ids?: number[];
     media_type?: "movie" | "tv";
 }) {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in toggleWatchlistAction:", error);
+        return { error: "Authentication failed" };
+    }
     if (!session?.user?.id) {
         return { error: "Unauthorized" };
     }
@@ -73,7 +79,13 @@ export async function toggleWatchedAction(movie: {
     genre_ids?: number[];
     media_type?: "movie" | "tv";
 }) {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in toggleWatchedAction:", error);
+        return { error: "Authentication failed" };
+    }
     if (!session?.user?.id) {
         return { error: "Unauthorized" };
     }
@@ -113,7 +125,13 @@ export async function toggleWatchedAction(movie: {
 }
 
 export async function getWatchlistStatusAction(movieId: number) {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in getWatchlistStatusAction:", error);
+        return { isSaved: false, isWatched: false };
+    }
     if (!session?.user?.id) return { isSaved: false, isWatched: false };
 
     await connectToDatabase();
@@ -130,7 +148,13 @@ export async function getWatchlistStatusAction(movieId: number) {
 
 // Simplified for client-side filtering
 export async function getWatchlistAction() {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in getWatchlistAction:", error);
+        return [];
+    }
     if (!session?.user?.id) return [];
 
     await connectToDatabase();
@@ -184,7 +208,13 @@ export async function getWatchedIdsAction() {
     return watchedItems.map(item => item.movieId);
 }
 export async function getUserWatchlistAction() {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in getUserWatchlistAction:", error);
+        return [];
+    }
     if (!session?.user?.id) return [];
 
     await connectToDatabase();
@@ -219,7 +249,13 @@ export async function getUserWatchlistAction() {
 }
 
 export async function getWatchlistGenresAction() {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in getWatchlistGenresAction:", error);
+        return [];
+    }
     if (!session?.user?.id) return [];
 
     await connectToDatabase();
