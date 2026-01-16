@@ -53,6 +53,15 @@ export async function getRecommendationsAction(mood: string): Promise<Movie[]> {
     }
 }
 
+export async function getMoodRecommendationsAction(mood: string): Promise<any[]> {
+    try {
+        return await getRecommendationsFromMood(mood);
+    } catch (error) {
+        console.error("Failed to get raw AI mood recommendations:", error);
+        return [];
+    }
+}
+
 export async function getShowRecommendationsAction(showTitle: string, overview: string, genres: string[]): Promise<any[]> {
     try {
         const recommendations = await getShowRecommendations(showTitle, overview, genres);
@@ -97,9 +106,9 @@ export async function getSeasonRankingAction(showTitle: string, seasons: any[]) 
     }
 }
 
-export async function getSimilarContentAction(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'movie'): Promise<any[]> {
+export async function getSimilarContentAction(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'movie', tmdbId?: number): Promise<any[]> {
     try {
-        const recommendations = await getSimilarContent(title, overview, genres, type);
+        const recommendations = await getSimilarContent(title, overview, genres, type, tmdbId);
         if (!recommendations.length) return [];
 
         // Hydrate with TMDB data

@@ -57,56 +57,86 @@ export function AIRecommendationCard({ movie }: AIRecommendationCardProps) {
             </div>
 
             {/* AI Insights Content */}
-            <div className="p-4 flex flex-col gap-4 flex-1 text-xs">
-                {/* Why Watch & Reason */}
-                <div className="space-y-2">
-                    <div className="flex items-start gap-2">
-                        <Sparkles className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
-                        <div>
-                            <p className="font-bold text-blue-400 uppercase tracking-wider text-[9px]">Why it matches your mood</p>
-                            <p className="text-gray-300 leading-relaxed italic">"{meta.reason}"</p>
+            <div className="p-4 flex flex-col gap-4 flex-1 text-sm">
+                {/* Why Matches */}
+                <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 uppercase tracking-wider">
+                        <Sparkles className="h-3 w-3" />
+                        Why it matches your mood
+                    </div>
+                    {movie.aiMeta?.reason ? (
+                        <p className="text-sm text-gray-300 italic leading-relaxed">
+                            "{movie.aiMeta.reason}"
+                        </p>
+                    ) : (
+                        <div className="mb-3">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
+                                Semantic Result
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Content Switch: AI Details vs Standard Overview */}
+                {movie.aiMeta?.target_audience ? (
+                    <>
+                        {/* For Whom / Feeling Grid */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white/5 rounded-lg p-3 border border-white/5">
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">
+                                    <Users className="h-3 w-3" />
+                                    For Whom
+                                </div>
+                                <p className="text-xs text-gray-400 leading-snug">
+                                    {movie.aiMeta.target_audience}
+                                </p>
+                            </div>
+                            <div className="bg-white/5 rounded-lg p-3 border border-white/5">
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-pink-400 uppercase tracking-wider mb-1">
+                                    <Heart className="h-3 w-3" />
+                                    Feeling
+                                </div>
+                                <p className="text-xs text-gray-400 leading-snug">
+                                    {movie.aiMeta.emotional_impact}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Ending Vibe */}
+                        <div className="bg-blue-500/10 rounded-lg p-3 border border-blue-500/20">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-300 uppercase tracking-wider mb-1">
+                                <Info className="h-3 w-3" />
+                                The Ending Vibe
+                            </div>
+                            <p className="text-sm text-blue-100/80 leading-snug">
+                                {movie.aiMeta.ending_mood}
+                            </p>
+                        </div>
+
+                        {/* Critics Consensus */}
+                        <div className="mt-auto pt-2">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                <Quote className="h-3 w-3" />
+                                Critics Consensus
+                            </div>
+                            <p className="text-xs text-gray-400 italic">
+                                "{movie.aiMeta.critics_consensus}"
+                            </p>
+                        </div>
+                    </>
+                ) : (
+                    /* Fallback: Show Standard Overview */
+                    <div className="mt-2 space-y-3">
+                        <div className="bg-white/5 rounded-lg p-3 border border-white/5">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                                Overview
+                            </div>
+                            <p className="text-xs text-gray-400 leading-relaxed line-clamp-4">
+                                {movie.overview || "No overview available."}
+                            </p>
                         </div>
                     </div>
-                </div>
-
-                {/* Grid of Details */}
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white/5 rounded-lg p-2 border border-white/5">
-                        <div className="flex items-center gap-1.5 mb-1">
-                            <Users className="h-3 w-3 text-purple-400" />
-                            <span className="font-bold text-[9px] text-purple-400 uppercase">For Whom</span>
-                        </div>
-                        <p className="text-gray-400 line-clamp-2 leading-tight">{meta.target_audience}</p>
-                    </div>
-
-                    <div className="bg-white/5 rounded-lg p-2 border border-white/5">
-                        <div className="flex items-center gap-1.5 mb-1">
-                            <Heart className="h-3 w-3 text-red-400" />
-                            <span className="font-bold text-[9px] text-red-400 uppercase">Feeling</span>
-                        </div>
-                        <p className="text-gray-400 line-clamp-2 leading-tight">{meta.emotional_impact}</p>
-                    </div>
-                </div>
-
-                {/* The End Vibe */}
-                <div className="bg-blue-500/10 rounded-lg p-2.5 border border-blue-500/20">
-                    <div className="flex items-center gap-2 mb-1">
-                        <Info className="h-3 w-3 text-blue-300" />
-                        <span className="font-bold text-[9px] text-blue-300 uppercase">The Ending Vibe</span>
-                    </div>
-                    <p className="text-blue-200/80 leading-snug">{meta.ending_mood}</p>
-                </div>
-
-                {/* Critics Section */}
-                <div className="mt-auto pt-3 border-t border-white/5">
-                    <div className="flex items-center gap-1.5 mb-1">
-                        <Quote className="h-3 w-3 text-gray-500" />
-                        <span className="font-bold text-[9px] text-gray-500 uppercase italic">Critics Consensus</span>
-                    </div>
-                    <p className="text-gray-500 leading-snug italic line-clamp-2">
-                        "{meta.critics_consensus}"
-                    </p>
-                </div>
+                )}
             </div>
 
             {/* Action Bar */}

@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { movieService, tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
-import { getRecommendationsFromMood } from "@/lib/ai";
 import { MovieGrid } from "@/components/movie-grid";
 import { MovieSection } from "@/components/movie-section";
 import { Movie, TVSeries } from "@/types/movie";
@@ -13,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { BrainLoader } from "@/components/brain-loader";
 import { logSearchAction } from "@/actions/history";
 import { Pagination } from "@/components/pagination";
+import { AISearchResults } from "@/components/ai-search-results";
 
 // Server Component
 export default async function Home(props: {
@@ -45,6 +45,21 @@ export default async function Home(props: {
     viewAllLink?: string;
     totalCount?: number;
   }[] = [];
+
+  // Handle Mood Search separately to enable Brain Loader
+  if (mood) {
+    return (
+      <main className="container mx-auto px-4 py-8 min-h-screen flex flex-col gap-8">
+        <HomeHeader />
+        <div className="flex flex-col gap-4">
+          <SearchFilters />
+          <Suspense fallback={<BrainLoader variant="section" />}>
+            <AISearchResults mood={mood} type={type} with_genres={with_genres} />
+          </Suspense>
+        </div>
+      </main>
+    );
+  }
 
   if (query) {
     isSearchOrFilter = true;
@@ -83,57 +98,6 @@ export default async function Home(props: {
       if (with_original_language) {
         movies = movies.filter(m => m.original_language === with_original_language);
         tv = tv.filter(s => s.original_language === with_original_language);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  } else if (mood) {
-    isSearchOrFilter = true;
-    viewTitle = `AI Recommendations for "${mood}"`;
-    try {
-      // AI Recommendations are usually small set, no pagination needed for now
-      const recommendations = await getRecommendationsFromMood(mood);
-      const results = await Promise.all(
-        recommendations.map(async (rec: any) => {
-          let movieData: any = null;
-          if (rec.type === "movie") {
-            const matches = await movieService.searchMovies(rec.title);
-            movieData = matches[0] ? { ...matches[0], media_type: "movie" as const } : null;
-          } else {
-            const matches = await tvService.searchTV(rec.title);
-            movieData = matches[0] ? { ...matches[0], media_type: "tv" as const } : null;
-          }
-
-          if (movieData) {
-            return {
-              ...movieData,
-              aiMeta: rec
-            };
-          }
-          return null;
-        })
-      );
-
-      const items = results.filter(Boolean) as ((Movie | TVSeries) & { aiMeta?: any })[];
-      const seen = new Set();
-      const uniqueItems = items.filter(item => {
-        const duplicate = seen.has(`${item.media_type}-${item.id}`);
-        seen.add(`${item.media_type}-${item.id}`);
-        return !duplicate && item.poster_path;
-      });
-
-      let filteredItems = uniqueItems;
-      if (type) {
-        filteredItems = uniqueItems.filter(i => i.media_type === type);
-      }
-
-      if (with_genres) {
-        const genreId = parseInt(with_genres);
-        movies = filteredItems.filter(i => i.media_type === "movie" && i.genre_ids?.includes(genreId)) as any;
-        tv = filteredItems.filter(i => i.media_type === "tv" && i.genre_ids?.includes(genreId)) as any;
-      } else {
-        movies = filteredItems.filter(i => i.media_type === "movie") as any;
-        tv = filteredItems.filter(i => i.media_type === "tv") as any;
       }
     } catch (e) {
       console.error(e);
@@ -218,18 +182,7 @@ export default async function Home(props: {
 
   return (
     <main className="container mx-auto px-4 py-8 min-h-screen flex flex-col gap-8">
-      <header className="flex flex-col items-center gap-6 text-center pt-8 fade-in">
-        <h1 className="text-4xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-          MovieFinder
-        </h1>
-        <p className="text-gray-400 max-w-lg">
-          Discover movies and TV series through search, filters, or describe your mood.
-        </p>
-
-        <div className="w-full max-w-4xl flex flex-col gap-4 items-center z-10">
-          <ClientHeader />
-        </div>
-      </header>
+      <HomeHeader />
 
       <div className="flex flex-col gap-4">
         <SearchFilters />
@@ -252,7 +205,7 @@ export default async function Home(props: {
           </div>
         )}
 
-        <Suspense fallback={<BrainLoader />}>
+        <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="animate-spin text-gray-500" /></div>}>
           {isSearchOrFilter ? (
             <div className="space-y-12">
               {[...movies, ...tv].length > 0 ? (
@@ -284,4 +237,21 @@ export default async function Home(props: {
       </div>
     </main>
   );
+}
+
+function HomeHeader() {
+  return (
+    <header className="flex flex-col items-center gap-6 text-center pt-8 fade-in">
+      <h1 className="text-4xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+        MovieFinder
+      </h1>
+      <p className="text-gray-400 max-w-lg">
+        Discover movies and TV series through search, filters, or describe your mood.
+      </p>
+
+      <div className="w-full max-w-4xl flex flex-col gap-4 items-center z-10">
+        <ClientHeader />
+      </div>
+    </header>
+  )
 }

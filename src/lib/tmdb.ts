@@ -111,6 +111,12 @@ export const movieService = {
         return uniquePeople;
     },
 
+    searchKeywords: async (query: string): Promise<{ id: number, name: string }[]> => {
+        if (!query) return [];
+        const data = await fetchFromTMDB<{ results: { id: number, name: string }[] }>("/search/keyword", { query });
+        return data.results || [];
+    },
+
     getMovieDetails: async (id: number): Promise<MovieDetails> => {
         const data = await fetchFromTMDB<MovieDetails>(`/movie/${id}`, {
             append_to_response: "credits,videos,external_ids",
@@ -122,6 +128,7 @@ export const movieService = {
 
     getDiscover: async (filters: {
         with_genres?: string;
+        with_keywords?: string;
         primary_release_year?: string;
         "vote_average.gte"?: string;
         "vote_count.gte"?: string;
@@ -164,6 +171,11 @@ export const movieService = {
     getMovieReviews: async (id: number): Promise<any[]> => {
         const data = await fetchFromTMDB<{ results: any[] }>(`/movie/${id}/reviews`);
         return data.results || [];
+    },
+
+    getSimilar: async (id: number): Promise<Movie[]> => {
+        const data = await fetchFromTMDB<MovieResponse>(`/movie/${id}/similar`);
+        return data.results.map(m => ({ ...m, media_type: "movie" }));
     }
 };
 

@@ -173,19 +173,20 @@ export default async function MoviePage({ params }: Props) {
                                 ))}
                             </div>
                         </div>
-                        <div className="space-y-4 pt-4 border-t border-white/10">
-                            <Suspense fallback={<BrainLoader />}>
+                        <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[300px]">
+                            <Suspense fallback={<BrainLoader variant="section" />}>
                                 <MovieReviews id={movie.id} title={movie.title} releaseDate={movie.release_date} />
                             </Suspense>
                         </div>
 
-                        <div className="space-y-4 pt-4 border-t border-white/10">
-                            <Suspense fallback={<BrainLoader />}>
+                        <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[400px]">
+                            <Suspense fallback={<BrainLoader variant="section" />}>
                                 <SimilarMedia
                                     title={movie.title}
                                     overview={movie.overview}
                                     genres={movie.genres.map((g: any) => g.name)}
                                     type="movie"
+                                    tmdbId={movie.id}
                                 />
                             </Suspense>
                         </div>

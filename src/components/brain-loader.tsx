@@ -3,9 +3,19 @@
 import { motion } from "framer-motion";
 import { Brain } from "lucide-react";
 
-export function BrainLoader() {
+export function BrainLoader({ variant = "fullscreen", message = "BRAIN IS BRAINING" }: { variant?: "fullscreen" | "section", message?: string }) {
+    const isSection = variant === "section";
+
     return (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md">
+        <div
+            className={`
+                flex flex-col items-center justify-center 
+                ${isSection
+                    ? "absolute inset-0 z-10 bg-black/60 backdrop-blur-sm rounded-xl"
+                    : "fixed inset-0 z-50 bg-black/80 backdrop-blur-md"
+                }
+            `}
+        >
             {/* Ambient Background Glow */}
             <motion.div
                 animate={{
@@ -17,10 +27,10 @@ export function BrainLoader() {
                     repeat: Infinity,
                     ease: "easeInOut",
                 }}
-                className="absolute w-96 h-96 bg-purple-600/20 rounded-full blur-[100px]"
+                className={`absolute bg-purple-600/20 rounded-full blur-[100px] ${isSection ? "w-48 h-48" : "w-96 h-96"}`}
             />
 
-            <div className="relative">
+            <div className={`relative ${isSection ? "scale-75" : ""}`}>
                 {/* Orbiting Particles */}
                 {[...Array(3)].map((_, i) => (
                     <motion.div
@@ -55,19 +65,19 @@ export function BrainLoader() {
                         ease: "easeInOut",
                     }}
                 >
-                    <Brain className="w-24 h-24 text-white" strokeWidth={1.5} />
+                    <Brain className={`${isSection ? "w-16 h-16" : "w-24 h-24"} text-white`} strokeWidth={1.5} />
                 </motion.div>
             </div>
 
             {/* Text Animation */}
             <motion.div
-                className="mt-12 flex items-center gap-1"
+                className={`flex items-center gap-1 ${isSection ? "mt-8" : "mt-12"}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
             >
-                <span className="text-2xl font-light text-white tracking-widest">
-                    BRAIN IS BRAINING
+                <span className={`${isSection ? "text-lg" : "text-2xl"} font-light text-white tracking-widest uppercase`}>
+                    {message}
                 </span>
                 <span className="flex gap-1 ml-1">
                     {[0, 1, 2].map((i) => (
@@ -90,7 +100,7 @@ export function BrainLoader() {
             </motion.div>
 
             <motion.p
-                className="mt-4 text-white/40 text-sm font-mono"
+                className={`text-white/40 font-mono ${isSection ? "mt-2 text-xs" : "mt-4 text-sm"}`}
                 animate={{ opacity: [0.4, 0.8, 0.4] }}
                 transition={{ duration: 3, repeat: Infinity }}
             >

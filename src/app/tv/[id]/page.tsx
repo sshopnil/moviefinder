@@ -212,20 +212,21 @@ export default async function TVPage({ params }: Props) {
                         </div>
 
                         {/* TV Reviews (AI Verdict & Reception) */}
-                        <div className="space-y-4 pt-4 border-t border-white/10">
-                            <Suspense fallback={<BrainLoader />}>
+                        <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[300px]">
+                            <Suspense fallback={<BrainLoader variant="section" />}>
                                 <TVReviews id={tv.id} title={tv.name} firstAirDate={tv.first_air_date} />
                             </Suspense>
                         </div>
 
                         {/* Similar Series (Live AI Recommendations) */}
-                        <div className="space-y-4 pt-4 border-t border-white/10">
-                            <Suspense fallback={<BrainLoader />}>
+                        <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[400px]">
+                            <Suspense fallback={<BrainLoader variant="section" />}>
                                 <SimilarMedia
                                     title={tv.name}
                                     overview={tv.overview}
                                     genres={tv.genres.map((g: any) => g.name)}
                                     type="tv"
+                                    tmdbId={tv.id}
                                 />
                             </Suspense>
                         </div>
