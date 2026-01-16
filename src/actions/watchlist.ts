@@ -164,7 +164,13 @@ export async function getWatchlistAction() {
 
 
 export async function getWatchedIdsAction() {
-    const session = await auth();
+    let session;
+    try {
+        session = await auth();
+    } catch (error) {
+        console.error("Auth error in getWatchedIdsAction:", error);
+        return [];
+    }
     if (!session?.user?.id) return [];
 
     await connectToDatabase();
