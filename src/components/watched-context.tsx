@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useOptimistic, useTransition, ReactNode } from "react";
+import { createContext, useContext, useState, useOptimistic, useTransition, ReactNode, useEffect } from "react";
 import { toggleWatchedAction } from "@/actions/watchlist";
 import { Movie } from "@/types/movie";
 
@@ -21,13 +21,29 @@ export function useWatched() {
 
 interface WatchedProviderProps {
     children: ReactNode;
-    initialWatchedIds: number[];
+    initialWatchedIds?: number[];
 }
 
-export function WatchedProvider({ children, initialWatchedIds }: WatchedProviderProps) {
+export function WatchedProvider({ children, initialWatchedIds = [] }: WatchedProviderProps) {
     // Keep track of IDs locally
     const [watchedIds, setWatchedIds] = useState<Set<number>>(new Set(initialWatchedIds));
     const [isPending, startTransition] = useTransition();
+
+    useEffect(() => {
+        const fetchWatched = async () => {
+            try {
+                const { getWatchedIdsAction } = await import("@/actions/watchlist");
+                const ids = await getWatchedIdsAction();
+                if (ids && ids.length > 0) {
+                    setWatchedIds(new Set(ids));
+                }
+            } catch (error) {
+                console.error("Failed to fetch watched IDs", error);
+            }
+        };
+
+        fetchWatched();
+    }, []);
 
     // Optimistic UI updates
     const [optimisticWatchedIds, setOptimisticWatchedIds] = useOptimistic(
