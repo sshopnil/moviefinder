@@ -7,7 +7,14 @@ import dbConnect from "@/lib/db";
 import { movieService, tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 
 // Using Llama 3.1 8B Instant (Best balance of speed/cost/quality)
-const MODEL_NAME = "llama-3.1-8b-instant";
+// Fallback Models (Replacing user-suggested 'Guard' models with actual Chat models that can output JSON)
+const MODELS = [
+    "llama-3.1-8b-instant",       // Primary: Fast & Cheap
+    "llama-3.3-70b-versatile",    // Fallback 1: High Quality
+    "mixtral-8x7b-32768",         // Fallback 2: Good reasoning
+    "gemma2-9b-it"                // Fallback 3: Google's open model
+];
+
 const MAX_RPM = 30; // Groq Limit
 
 // In-memory rate limiter (simple counter resets every minute)
@@ -44,6 +51,56 @@ const callWithTimeout = async (promise: Promise<any>, ms: number) => {
     }
 };
 
+// Start Helper: Model Fallback Invoker
+async function invokeWithModelFallback(apiKey: string, input: string, totalTimeoutMs: number = 20000, temperature: number = 0.7) {
+    let lastError;
+    const startTime = Date.now();
+
+    for (const modelName of MODELS) {
+        const elapsed = Date.now() - startTime;
+        const remaining = totalTimeoutMs - elapsed;
+
+        // If we have less than 3s left, don't bother starting a new request, just fallback.
+        // This ensures we respect the user's "wait for 20s" limit effectively.
+        if (remaining < 3000) {
+            console.log(`[AI] Time budget exhausted (Elapsed: ${elapsed}ms). Skipping remaining models to fallback earlier.`);
+            break;
+        }
+
+        // Determine timeout for this specific attempt. 
+        // We cap it at 8s to ensure we can try at least 2-3 models within the 20s budget.
+        const attemptTimeout = Math.min(remaining, 8000);
+
+        try {
+            // Check limits before trying (optional, but good practice to respect global limit if shared)
+            // Ideally we'd have per-model limits, but Groq usually has a total TPM/RPM. 
+            // We'll rely on the API returning 429 to trigger the next model.
+
+            const model = new ChatGroq({
+                apiKey,
+                model: modelName,
+                temperature: temperature,
+            });
+
+            // console.log(`[AI] Trying model: ${modelName} (Timeout: ${attemptTimeout}ms)`);
+            const response = await callWithTimeout(model.invoke(input), attemptTimeout);
+            return response; // Success!
+
+        } catch (error: any) {
+            console.log(`[AI] Model ${modelName} failed: ${error?.message || String(error)}`);
+            lastError = error;
+
+            // If it's NOT a rate limit (429) or timeout, maybe we shouldn't retry? 
+            // Actually, for "try your best", we should strictly retry on almost anything except maybe Auth errors.
+            // Continuing to next model...
+        }
+    }
+
+    // All models failed or time ran out
+    throw lastError || new Error("All AI models failed or timed out.");
+}
+// End Helper
+
 async function getCachedData(key: string) {
     try {
         await dbConnect();
@@ -77,7 +134,7 @@ async function setCachedData(key: string, data: any) {
             {
                 key,
                 data,
-                modelUsed: MODEL_NAME
+                modelUsed: MODELS[0] // Just logging primary, or we could pass actual model used but simpler to keep schema strict
             },
             { upsert: true, new: true }
         );
@@ -170,17 +227,11 @@ export async function getRecommendationsFromMood(mood: string) {
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
-    // 2. Check Rate Limit
+    // 2. Check Rate Limit (Primary check)
     if (!rateLimiter.checkLimit()) {
         console.warn(`[Groq] Rate limit exceeded. Using fallback for mood: ${mood}`);
         return await getMoodFallback(mood);
     }
-
-    const model = new ChatGroq({
-        apiKey,
-        model: MODEL_NAME,
-        temperature: 0.7,
-    });
 
     const recommendationSchema = z.object({
         recommendations: z.array(z.object({
@@ -218,8 +269,8 @@ export async function getRecommendationsFromMood(mood: string) {
 
     try {
         const input = await prompt.format({ mood });
-        // 10s Timeout limit
-        const response = await callWithTimeout(model.invoke(input), 10000);
+        // Use Model Fallback Invoker
+        const response = await invokeWithModelFallback(apiKey, input, 20000, 0.7);
 
         const cleaned = cleanLLMOutput(response.content as string);
         const parsed = await parser.parse(cleaned);
@@ -343,17 +394,10 @@ export async function getMovieInsights(id: number | string, title: string, ratin
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
-    // 2. Check Rate Limit
+    // Rate Limit Check
     if (!rateLimiter.checkLimit()) {
-        // Fallback for insights is just static data as we can't easily generate new text without AI
         return getInsightFallback();
     }
-
-    const model = new ChatGroq({
-        apiKey,
-        model: MODEL_NAME,
-        temperature: 0.7,
-    });
 
     const insightsSchema = z.object({
         verdict: z.string(),
@@ -390,8 +434,8 @@ export async function getMovieInsights(id: number | string, title: string, ratin
         });
 
         const input = await prompt.format({ title: title || "Unknown Title", ratingsSummary, reviewsSummary });
-        // 20s Timeout limit (User Requested)
-        const response = await callWithTimeout(model.invoke(input), 20000);
+        // Use Model Fallback Invoker
+        const response = await invokeWithModelFallback(apiKey, input, 20000, 0.7);
 
         const cleaned = cleanLLMOutput(response.content as string);
         const parsed = await parser.parse(cleaned);
@@ -442,12 +486,6 @@ export async function getSimilarContent(title: string, overview: string, genres:
         return await getSimilarFallback(title, type, tmdbId, genres);
     }
 
-    const model = new ChatGroq({
-        apiKey,
-        model: MODEL_NAME,
-        temperature: 0.7,
-    });
-
     const recommendationSchema = z.object({
         recommendations: z.array(z.object({
             title: z.string(),
@@ -481,8 +519,8 @@ export async function getSimilarContent(title: string, overview: string, genres:
     try {
         const input = await prompt.format({ type, title, overview, genres: genres.slice(0, 3).join(", ") }); // Limit genres to reduce tokens
 
-        // 10s Timeout limit
-        const response = await callWithTimeout(model.invoke(input), 10000);
+        // Use Model Fallback Invoker
+        const response = await invokeWithModelFallback(apiKey, input, 20000, 0.7);
 
         const cleaned = cleanLLMOutput(response.content as string);
         const parsed = await parser.parse(cleaned);
@@ -574,12 +612,6 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
         return getSeasonRankingFallback(seasons);
     }
 
-    const model = new ChatGroq({
-        apiKey,
-        model: MODEL_NAME,
-        temperature: 0.3,
-    });
-
     const rankingSchema = z.object({
         rankings: z.array(z.object({
             season_number: z.number(),
@@ -614,7 +646,7 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
         });
 
         const input = await prompt.format({ showTitle: showTitle || "Unknown Show", seasonsInfo });
-        const response = await callWithTimeout(model.invoke(input), 10000);
+        const response = await invokeWithModelFallback(apiKey, input, 20000, 0.3);
 
         const cleaned = cleanLLMOutput(response.content as string);
         const parsed = await parser.parse(cleaned);
