@@ -60,15 +60,15 @@ export function WatchProviders({ providers, tmdbId, mediaType, seasons, title, p
     const getStreamUrl = () => {
         if (mediaType === "movie") {
             switch (selectedServer) {
-                case "vidsrc": return `https://vidsrc.xyz/embed/movie/${tmdbId}`;
+                case "vidsrc": return `https://vidsrc.cc/v2/embed/movie/${tmdbId}`;
                 case "superembed": return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`;
-                default: return `https://vidsrc.xyz/embed/movie/${tmdbId}`;
+                default: return `https://vidsrc.cc/v2/embed/movie/${tmdbId}`;
             }
         } else {
             switch (selectedServer) {
-                case "vidsrc": return `https://vidsrc.xyz/embed/tv/${tmdbId}/${selectedSeason}-${selectedEpisode}`;
+                case "vidsrc": return `https://vidsrc.cc/v2/embed/tv/${tmdbId}/${selectedSeason}/${selectedEpisode}`;
                 case "superembed": return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${selectedSeason}&e=${selectedEpisode}`;
-                default: return `https://vidsrc.xyz/embed/tv/${tmdbId}/${selectedSeason}-${selectedEpisode}`;
+                default: return `https://vidsrc.cc/v2/embed/tv/${tmdbId}/${selectedSeason}/${selectedEpisode}`;
             }
         }
     };

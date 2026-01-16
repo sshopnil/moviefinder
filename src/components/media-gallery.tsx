@@ -183,6 +183,7 @@ export function MediaGallery({ images }: MediaGalleryProps) {
                                 <GalleryImage
                                     src={image.type === 'backdrop' ? TMDB_IMAGE_URL.backdrop(image.file_path) : TMDB_IMAGE_URL.poster(image.file_path)}
                                     alt="Gallery Image"
+                                    className="object-cover"
                                 />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                                     <ZoomIn className="text-white w-8 h-8 opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-50 group-hover:scale-100 drop-shadow-lg" />

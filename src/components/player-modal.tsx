@@ -1,5 +1,5 @@
-import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { X, Volume2, VolumeX } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { logViewAction } from "@/actions/history";
 
@@ -18,6 +18,10 @@ interface PlayerModalProps {
 export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_path, season, episode }: PlayerModalProps) {
     // ref to track last update to avoid spamming
     const lastUpdateRef = useRef<number>(0);
+    const iframeRef = useRef<HTMLIFrameElement>(null);
+    const [volume, setVolume] = useState(100);
+    const [showVolume, setShowVolume] = useState(false);
+    const volumeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
@@ -29,16 +33,8 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
             if (!e.origin || !e.data) return;
 
             // Vidsrc specific message format
-            // Based on research: standard HTML5 video events might be proxied or custom format.
-            // Often: { event: 'time', data: { time: 123, duration: 456 } } or similar.
-            // Let's log to see what we get first? No, we need to implement best guess.
-            // Common embed player pattern:
             try {
                 const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-
-                // VidSrc often sends: { type: "timeupdate", data: { currentTime: 10, duration: 100 } }
-                // or just { currentTime: 10, duration: 100 }
-
                 const currentTime = data?.data?.currentTime || data?.currentTime || data?.time;
                 const duration = data?.data?.duration || data?.duration;
 
@@ -73,10 +69,51 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
         };
     }, [onClose, tmdbId, mediaType, title, poster_path, season, episode]);
 
+    const handleVolumeChange = (delta: number) => {
+        const newVolume = Math.min(100, Math.max(0, volume + delta));
+        setVolume(newVolume);
+        setShowVolume(true);
+
+        // Clear existing timeout
+        if (volumeTimeoutRef.current) clearTimeout(volumeTimeoutRef.current);
+
+        // Hide after 2 seconds
+        volumeTimeoutRef.current = setTimeout(() => {
+            setShowVolume(false);
+        }, 2000);
+
+        // Try to send volume command to iframe (best effort)
+        if (iframeRef.current?.contentWindow) {
+            // Try common formats
+            const formats = [
+                { event: 'command', func: 'setVolume', args: [newVolume] },
+                { event: 'command', func: 'setVolume', args: [newVolume / 100] },
+                { type: 'setVolume', data: newVolume },
+                { type: 'setVolume', value: newVolume }
+            ];
+
+            formats.forEach(msg => {
+                iframeRef.current?.contentWindow?.postMessage(JSON.stringify(msg), '*');
+            });
+        }
+    };
+
+    const handleWheel = (e: React.WheelEvent) => {
+        // Only handle vertical scroll
+        if (Math.abs(e.deltaY) > 0) {
+            // Scroll up (negative delta) increases volume
+            const direction = e.deltaY < 0 ? 1 : -1;
+            handleVolumeChange(direction * 5);
+        }
+    };
+
     if (!url) return null;
 
     return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200">
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
+            onWheel={handleWheel}
+        >
             <div className="relative w-full h-full sm:max-w-6xl sm:h-auto sm:aspect-video bg-black sm:rounded-xl overflow-hidden shadow-2xl flex flex-col">
                 <button
                     onClick={onClose}
@@ -84,11 +121,34 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
                 >
                     <X className="h-6 w-6" />
                 </button>
+
+                {/* Volume Overlay */}
+                <div
+                    className={`absolute inset-0 z-20 pointer-events-none flex items-center justify-center transition-opacity duration-300 ${showVolume ? 'opacity-100' : 'opacity-0'}`}
+                >
+                    <div className="bg-black/60 backdrop-blur-md rounded-2xl p-6 flex flex-col items-center gap-4 text-white min-w-[120px]">
+                        {volume === 0 ? (
+                            <VolumeX className="w-12 h-12 text-white/80" />
+                        ) : (
+                            <Volume2 className="w-12 h-12 text-white/80" />
+                        )}
+                        <span className="text-2xl font-bold">{volume}%</span>
+                        <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-white transition-all duration-100"
+                                style={{ width: `${volume}%` }}
+                            />
+                        </div>
+                    </div>
+                </div>
+
                 <iframe
+                    ref={iframeRef}
                     src={url}
                     title="Media Player"
                     className="w-full h-full flex-1 border-0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    sandbox="allow-forms allow-scripts allow-same-origin allow-presentation allow-popups allow-modals allow-storage-access-by-user-activation"
                     allowFullScreen
                 />
             </div>
