@@ -32,26 +32,7 @@ export interface TVSeries {
     media_type?: MediaType;
 }
 
-export interface MovieDetails extends Movie {
-    genres: Genre[];
-    runtime: number;
-    tagline: string;
-    cast: Cast[];
-    imdb_id?: string;
-    videos: { results: Video[] };
-}
 
-export interface TVDetails extends TVSeries {
-    genres: Genre[];
-    episode_run_time: number[];
-    number_of_episodes: number;
-    number_of_seasons: number;
-    tagline: string;
-    cast: Cast[];
-    imdb_id?: string;
-    videos: { results: Video[] };
-    seasons: Season[];
-}
 
 export interface Season {
     id: number;
@@ -110,4 +91,47 @@ export interface MovieInsights {
     feeling: string;
     ending_vibe: string;
     critics_consensus: string;
+}
+
+export interface Provider {
+    logo_path: string;
+    provider_id: number;
+    provider_name: string;
+    display_priority: number;
+}
+
+export interface WatchProviders {
+    results: {
+        [key: string]: {
+            link: string;
+            flatrate?: Provider[];
+            rent?: Provider[];
+            buy?: Provider[];
+            ads?: Provider[];
+            free?: Provider[];
+        }
+    }
+}
+
+export interface MovieDetails extends Movie {
+    genres: Genre[];
+    runtime: number;
+    tagline: string;
+    cast: Cast[];
+    imdb_id?: string;
+    videos: { results: Video[] };
+    watch_providers?: WatchProviders;
+}
+
+export interface TVDetails extends TVSeries {
+    genres: Genre[];
+    episode_run_time: number[];
+    number_of_episodes: number;
+    number_of_seasons: number;
+    tagline: string;
+    cast: Cast[];
+    imdb_id?: string;
+    videos: { results: Video[] };
+    seasons: Season[];
+    watch_providers?: WatchProviders;
 }

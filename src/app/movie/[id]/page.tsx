@@ -13,6 +13,7 @@ import { MediaGallerySkeleton } from "@/components/media-gallery-skeleton";
 import { MovieReviews } from "@/components/movie-reviews";
 import { SimilarMedia } from "@/components/similar-media";
 import { BrainLoader } from "@/components/brain-loader";
+import { WatchProviders } from "@/components/watch-providers";
 
 
 // Use generic 'params' type handling available in newer Next.js versions or simple awaitable
@@ -36,12 +37,8 @@ export default async function MoviePage({ params }: Props) {
         if (!movie) return notFound();
 
         // Log view
-        logViewAction({
-            id: movie.id,
-            type: 'movie',
-            title: movie.title,
-            poster_path: movie.poster_path
-        }).catch(e => console.error("Failed to log view:", e));
+        // Log view removed to prevent revalidatePath error during render.
+        // History is now tracked via WatchProviders when user plays content.
 
         const status = await getWatchlistStatusAction(parseInt(id));
         if (status) {
@@ -141,6 +138,16 @@ export default async function MoviePage({ params }: Props) {
                         <div className="space-y-2">
                             <h3 className="text-lg font-semibold text-white">Overview</h3>
                             <p className="text-gray-300 leading-relaxed">{movie.overview}</p>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-white/10">
+                            <WatchProviders
+                                providers={movie.watch_providers}
+                                tmdbId={movie.id}
+                                mediaType="movie"
+                                title={movie.title}
+                                poster_path={movie.poster_path}
+                            />
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-white/10">

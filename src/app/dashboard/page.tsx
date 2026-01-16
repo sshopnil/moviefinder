@@ -2,10 +2,9 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserPasswordForm } from "@/components/user-password-form";
-import { History, User } from "lucide-react";
+import { History } from "lucide-react";
 import { getRecentlyViewedAction } from "@/actions/history";
-import { MovieCard } from "@/components/movie-card";
-import { PersonCard } from "@/components/person-card";
+import { ContinueWatchingRow } from "@/components/continue-watching-row";
 
 export default async function DashboardPage() {
     const session = await auth();
@@ -14,9 +13,18 @@ export default async function DashboardPage() {
         redirect("/login");
     }
 
+    const history = await getRecentlyViewedAction(20);
+
     return (
         <main className="container mx-auto px-4 py-20 min-h-screen">
             <h1 className="text-4xl font-bold mb-8 text-white">Dashboard</h1>
+
+            {/* Continue Watching Section */}
+            {history.length > 0 && (
+                <div className="mb-12">
+                    <ContinueWatchingRow items={history} />
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <GlassCard className="space-y-6">
@@ -42,44 +50,7 @@ export default async function DashboardPage() {
                     <h2 className="text-2xl font-semibold text-white mb-4">Security</h2>
                     <UserPasswordForm userEmail={session.user.email!} />
                 </GlassCard>
-
-                <GlassCard className="space-y-6 md:col-span-2">
-                    <h2 className="text-2xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <History className="h-6 w-6 text-gray-400" />
-                        Recently Viewed
-                    </h2>
-                    <DashboardHistory />
-                </GlassCard>
             </div>
         </main>
-    );
-}
-
-async function DashboardHistory() {
-    const history = await getRecentlyViewedAction(10);
-
-    if (history.length === 0) {
-        return <p className="text-gray-400">No recently viewed items.</p>;
-    }
-
-    return (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {history.map((item: any) => {
-                if (item.media_type === 'person') {
-                    return <PersonCard key={`person-${item.id}`} person={{ ...item, known_for_department: 'Actor' }} />;
-                }
-                return (
-                    <MovieCard
-                        key={`movie-${item.id}`}
-                        movie={{
-                            ...item,
-                            vote_average: 0,
-                            release_date: '',
-                            genre_ids: []
-                        }}
-                    />
-                );
-            })}
-        </div>
     );
 }

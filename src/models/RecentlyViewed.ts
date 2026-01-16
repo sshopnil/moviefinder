@@ -14,11 +14,15 @@ const RecentlyViewedSchema = new mongoose.Schema(
         },
         itemType: {
             type: String,
-            enum: ['movie', 'person'],
+            enum: ['movie', 'person', 'tv'],
             required: true,
         },
         title: String,
         poster_path: String,
+        season: Number,
+        episode: Number,
+        progress: Number, // In minutes or percentage
+        duration: Number, // Total duration in minutes
     },
     { timestamps: true }
 );

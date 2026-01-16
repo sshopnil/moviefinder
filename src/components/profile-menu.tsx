@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { User, LayoutDashboard, LogOut } from "lucide-react";
+import { User, LayoutDashboard, LogOut, History as HistoryIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { signOutAction } from "@/actions/signout";
 import { cn } from "@/lib/utils";
@@ -67,6 +67,15 @@ export function ProfileMenu({ user }: ProfileMenuProps) {
                             >
                                 <LayoutDashboard className="h-4 w-4" />
                                 Dashboard
+                            </Link>
+
+                            <Link
+                                href="/history"
+                                onClick={() => setIsOpen(false)}
+                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                            >
+                                <HistoryIcon className="h-4 w-4" />
+                                History
                             </Link>
 
                             <button

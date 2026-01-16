@@ -13,13 +13,16 @@ import { SeasonRanking } from "@/components/season-ranking";
 import { TVReviews } from "@/components/tv-reviews";
 import { SimilarMedia } from "@/components/similar-media";
 import { BrainLoader } from "@/components/brain-loader";
+import { WatchProviders } from "@/components/watch-providers";
 
 type Props = {
     params: Promise<{ id: string }>;
+    searchParams: Promise<{ season?: string; episode?: string }>;
 };
 
-export default async function TVPage({ params }: Props) {
+export default async function TVPage({ params, searchParams }: Props) {
     const { id } = await params;
+    const { season, episode } = await searchParams;
 
     if (!id) return notFound();
 
@@ -37,12 +40,8 @@ export default async function TVPage({ params }: Props) {
         seasonRankings = await getSeasonRankingAction(tv.name, tv.seasons) || [];
 
         // Log view
-        logViewAction({
-            id: tv.id,
-            type: 'tv' as const,
-            title: tv.name,
-            poster_path: tv.poster_path
-        }).catch(e => console.error("Failed to log view:", e));
+        // Log view removed to prevent revalidatePath error during render.
+        // History is now tracked via WatchProviders when user plays content.
 
         const status = await getWatchlistStatusAction(parseInt(id));
         if (status) {
@@ -148,6 +147,19 @@ export default async function TVPage({ params }: Props) {
                         <div className="space-y-2">
                             <h3 className="text-lg font-semibold text-white">Overview</h3>
                             <p className="text-gray-300 leading-relaxed">{tv.overview}</p>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-white/10">
+                            <WatchProviders
+                                providers={tv.watch_providers}
+                                tmdbId={tv.id}
+                                mediaType="tv"
+                                seasons={tv.seasons}
+                                title={tv.name}
+                                poster_path={tv.poster_path}
+                                initialSeason={season ? parseInt(season) : undefined}
+                                initialEpisode={episode ? parseInt(episode) : undefined}
+                            />
                         </div>
 
                         {/* Season Ranking */}

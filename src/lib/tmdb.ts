@@ -5,9 +5,10 @@ const IMAGE_BASE_URL = "https://image.tmdb.org/t/p";
 import { Movie, MovieDetails, MovieResponse, TVSeries, TVDetails } from "@/types/movie";
 
 export const TMDB_IMAGE_URL = {
-    poster: (path: string | null) => path ? `${IMAGE_BASE_URL}/poster${path}` : "/placeholder-poster.png",
-    backdrop: (path: string | null) => path ? `${IMAGE_BASE_URL}/backdrop${path}` : "/placeholder-backdrop.png",
-    profile: (path: string | null) => path ? `${IMAGE_BASE_URL}/profile${path}` : "/placeholder-profile.png",
+    poster: (path: string | null) => path ? `${IMAGE_BASE_URL}/w500${path}` : "/placeholder-poster.png",
+    backdrop: (path: string | null) => path ? `${IMAGE_BASE_URL}/original${path}` : "/placeholder-backdrop.png",
+    profile: (path: string | null) => path ? `${IMAGE_BASE_URL}/h632${path}` : "/placeholder-profile.png",
+    logo: (path: string | null) => path ? `${IMAGE_BASE_URL}/original${path}` : "/placeholder-icon.png",
 };
 
 async function fetchFromTMDB<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
@@ -119,11 +120,17 @@ export const movieService = {
 
     getMovieDetails: async (id: number): Promise<MovieDetails> => {
         const data = await fetchFromTMDB<MovieDetails>(`/movie/${id}`, {
-            append_to_response: "credits,videos,external_ids",
+            append_to_response: "credits,videos,external_ids,watch/providers",
         });
         const imdb_id = (data as any).external_ids?.imdb_id || data.imdb_id;
         const cast = (data as any).credits?.cast?.slice(0, 10) || [];
-        return { ...data, cast, imdb_id, media_type: "movie" };
+        return {
+            ...data,
+            cast,
+            imdb_id,
+            media_type: "movie",
+            watch_providers: (data as any)["watch/providers"]
+        };
     },
 
     getDiscover: async (filters: {
@@ -192,11 +199,17 @@ export const tvService = {
 
     getTVDetails: async (id: number): Promise<TVDetails> => {
         const data = await fetchFromTMDB<TVDetails>(`/tv/${id}`, {
-            append_to_response: "credits,videos,external_ids",
+            append_to_response: "credits,videos,external_ids,watch/providers",
         });
         const imdb_id = (data as any).external_ids?.imdb_id;
         const cast = (data as any).credits?.cast?.slice(0, 10) || [];
-        return { ...data, cast, imdb_id, media_type: "tv" };
+        return {
+            ...data,
+            cast,
+            imdb_id,
+            media_type: "tv",
+            watch_providers: (data as any)["watch/providers"]
+        };
     },
 
     searchTV: async (query: string): Promise<TVSeries[]> => {

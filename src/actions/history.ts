@@ -36,12 +36,27 @@ export async function logViewAction(item: {
     id: number,
     type: 'movie' | 'person' | 'tv',
     title: string,
-    poster_path: string | null
+    poster_path: string | null,
+    season?: number,
+    episode?: number,
+    progress?: number,
+    duration?: number
 }) {
     const session = await auth();
     if (!session?.user?.id) return;
 
     await connectToDatabase();
+
+    const updateFields: any = {
+        title: item.title,
+        poster_path: item.poster_path,
+        season: item.season,
+        episode: item.episode,
+        $set: { updatedAt: new Date() }
+    };
+
+    if (item.progress !== undefined) updateFields.progress = item.progress;
+    if (item.duration !== undefined) updateFields.duration = item.duration;
 
     await RecentlyViewed.findOneAndUpdate(
         {
@@ -49,13 +64,34 @@ export async function logViewAction(item: {
             itemId: item.id,
             itemType: item.type
         },
-        {
-            title: item.title,
-            poster_path: item.poster_path, // Update image in case it changed or was added
-            $set: { updatedAt: new Date() } // Force update timestamp
-        },
+        updateFields,
         { upsert: true, new: true }
     );
+
+    // revalidatePath only needs to happen if we want immediate UI updates. 
+    // For progress updates (every few seconds), we probably don't want to revalidate continuously.
+    // Maybe only on initial play or significant changes?
+    // We'll leave it for now but might need to optimize if it causes lag.
+    revalidatePath("/dashboard");
+    revalidatePath("/history");
+}
+
+export async function removeFromHistoryAction(itemId: number, itemType: string) {
+    const session = await auth();
+    if (!session?.user?.id) return;
+    await connectToDatabase();
+    await RecentlyViewed.deleteOne({ userId: session.user.id, itemId, itemType });
+    revalidatePath("/dashboard");
+    revalidatePath("/history");
+}
+
+export async function clearHistoryAction() {
+    const session = await auth();
+    if (!session?.user?.id) return;
+    await connectToDatabase();
+    await RecentlyViewed.deleteMany({ userId: session.user.id });
+    revalidatePath("/dashboard");
+    revalidatePath("/history");
 }
 
 export async function getRecentSearchesAction(limit = 10) {
@@ -89,6 +125,11 @@ export async function getRecentlyViewedAction(limit = 10) {
         poster_path: h.poster_path,
         profile_path: h.poster_path || null, // Alias for PersonCard
         media_type: h.itemType, // 'movie' or 'person'
+        season: h.season,
+        episode: h.episode,
+        progress: h.progress,
+        duration: h.duration,
+        updatedAt: h.updatedAt,
         // Mock timestamps or minimal fields
         release_date: '',
         vote_average: 0
