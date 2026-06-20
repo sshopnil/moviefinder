@@ -1,5 +1,5 @@
 // This file is disabled because @langchain/google-genai caused dependency conflicts and was removed.
-// The main application uses @langchain/groq.
+// The main application uses the Vercel AI SDK with @ai-sdk/google.
 
 /*
 const { ChatGoogleGenerativeAI } = require("@langchain/google-genai");

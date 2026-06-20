@@ -1,10 +1,27 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Brain } from "lucide-react";
+import { Brain, Clapperboard, Film, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export function BrainLoader({ variant = "fullscreen", message = "BRAIN IS BRAINING" }: { variant?: "fullscreen" | "section", message?: string }) {
     const isSection = variant === "section";
+    const [step, setStep] = useState(0);
+    const statusMessages = [
+        "Reading the room...",
+        "Checking critic signals...",
+        "Matching tone and pacing...",
+        "Sorting hidden gems...",
+        "Polishing the verdict...",
+    ];
+
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            setStep((current) => (current + 1) % statusMessages.length);
+        }, 2600);
+
+        return () => window.clearInterval(interval);
+    }, [statusMessages.length]);
 
     return (
         <div
@@ -67,6 +84,19 @@ export function BrainLoader({ variant = "fullscreen", message = "BRAIN IS BRAINI
                 >
                     <Brain className={`${isSection ? "w-16 h-16" : "w-24 h-24"} text-white`} strokeWidth={1.5} />
                 </motion.div>
+
+                <div className="absolute -bottom-3 left-1/2 flex -translate-x-1/2 gap-2">
+                    {[Film, Clapperboard, Sparkles].map((Icon, i) => (
+                        <motion.div
+                            key={i}
+                            className="rounded-full border border-white/10 bg-white/10 p-1.5 text-purple-200 backdrop-blur"
+                            animate={{ y: [0, -5, 0], opacity: [0.45, 1, 0.45] }}
+                            transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.25 }}
+                        >
+                            <Icon className={isSection ? "h-3.5 w-3.5" : "h-4 w-4"} />
+                        </motion.div>
+                    ))}
+                </div>
             </div>
 
             {/* Text Animation */}
@@ -100,11 +130,14 @@ export function BrainLoader({ variant = "fullscreen", message = "BRAIN IS BRAINI
             </motion.div>
 
             <motion.p
-                className={`text-white/40 font-mono ${isSection ? "mt-2 text-xs" : "mt-4 text-sm"}`}
-                animate={{ opacity: [0.4, 0.8, 0.4] }}
-                transition={{ duration: 3, repeat: Infinity }}
+                key={step}
+                className={`text-center text-white/50 font-mono ${isSection ? "mt-2 max-w-xs text-xs" : "mt-4 max-w-md text-sm"}`}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: [0.45, 0.9, 0.65], y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.6 }}
             >
-                Simulating neural pathways...
+                {statusMessages[step]}
             </motion.p>
         </div>
     );

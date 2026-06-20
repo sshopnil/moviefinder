@@ -1,12 +1,13 @@
 "use client";
 
-import { Play, Check, Eye } from "lucide-react";
+import { Play, Check, Eye, Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { TrailerModal } from "@/components/trailer-modal";
 import { WatchlistButton } from "@/components/watchlist-button";
 import { MovieDetails } from "@/types/movie";
 import { useRouter } from "next/navigation";
 import { toggleWatchedAction } from "@/actions/watchlist";
+import { useSession } from "next-auth/react";
 
 interface MovieActionsProps {
     movie: MovieDetails;
@@ -59,11 +60,19 @@ export function MovieActions({ movie, isSaved, isWatched }: MovieActionsProps) {
 }
 
 function WatchedButton({ movie, initialIsWatched }: { movie: any, initialIsWatched: boolean }) {
+    const { data: session, status } = useSession();
     const [isWatched, setIsWatched] = useState(initialIsWatched);
     const [isPending, startTransition] = useTransition();
     const router = useRouter();
 
     const handleToggle = async () => {
+        if (status === "loading") return;
+
+        if (!session) {
+            router.push("/login?callbackUrl=" + window.location.pathname);
+            return;
+        }
+
         const newState = !isWatched;
         setIsWatched(newState);
 
@@ -95,14 +104,20 @@ function WatchedButton({ movie, initialIsWatched }: { movie: any, initialIsWatch
     return (
         <button
             onClick={handleToggle}
-            disabled={isPending}
+            disabled={isPending || status === "loading"}
             className={`flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold transition-all border-2 active:scale-[0.98] w-full sm:w-auto ${isWatched
                 ? "bg-green-600 border-green-600 text-white hover:bg-green-700 hover:border-green-700 shadow-lg shadow-green-900/20"
                 : "bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20"
                 }`}
         >
-            {isWatched ? <Check className="h-4 w-4 stroke-[3px]" /> : <Eye className="h-4 w-4" />}
-            {isWatched ? "Watched" : "Mark Watched"}
+            {isPending || status === "loading" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isWatched ? (
+                <Check className="h-4 w-4 stroke-[3px]" />
+            ) : (
+                <Eye className="h-4 w-4" />
+            )}
+            {!session ? "Sign in to mark watched" : isWatched ? "Watched" : "Mark Watched"}
         </button>
     );
 }

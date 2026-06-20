@@ -14,7 +14,7 @@ interface WatchlistButtonProps {
 }
 
 export function WatchlistButton({ movie, initialIsSaved }: WatchlistButtonProps) {
-    const { data: session } = useSession();
+    const { data: session, status } = useSession();
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [optimisticSaved, addOptimisticSaved] = useOptimistic(
@@ -23,6 +23,8 @@ export function WatchlistButton({ movie, initialIsSaved }: WatchlistButtonProps)
     );
 
     const handleToggle = async () => {
+        if (status === "loading") return;
+
         if (!session) {
             router.push("/login?callbackUrl=" + window.location.pathname);
             return;
@@ -55,7 +57,7 @@ export function WatchlistButton({ movie, initialIsSaved }: WatchlistButtonProps)
     return (
         <button
             onClick={handleToggle}
-            disabled={isPending}
+            disabled={isPending || status === "loading"}
             className={cn(
                 "flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold transition-all border-2 active:scale-[0.98] w-full sm:w-auto",
                 optimisticSaved
@@ -63,12 +65,12 @@ export function WatchlistButton({ movie, initialIsSaved }: WatchlistButtonProps)
                     : "bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20"
             )}
         >
-            {isPending ? (
+            {isPending || status === "loading" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
                 <Heart className={cn("h-4 w-4", optimisticSaved && "fill-current")} />
             )}
-            {optimisticSaved ? "Saved" : "Watchlist"}
+            {!session ? "Sign in to save" : optimisticSaved ? "Saved" : "Watchlist"}
         </button>
     );
 }

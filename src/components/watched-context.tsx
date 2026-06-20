@@ -3,6 +3,8 @@
 import { createContext, useContext, useState, useOptimistic, useTransition, ReactNode, useEffect } from "react";
 import { toggleWatchedAction } from "@/actions/watchlist";
 import { Movie } from "@/types/movie";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 interface WatchedContextType {
     isWatched: (id: number) => boolean;
@@ -25,11 +27,15 @@ interface WatchedProviderProps {
 }
 
 export function WatchedProvider({ children, initialWatchedIds = [] }: WatchedProviderProps) {
+    const { data: session, status } = useSession();
+    const router = useRouter();
     // Keep track of IDs locally
     const [watchedIds, setWatchedIds] = useState<Set<number>>(new Set(initialWatchedIds));
     const [isPending, startTransition] = useTransition();
 
     useEffect(() => {
+        if (status !== "authenticated") return;
+
         const fetchWatched = async () => {
             try {
                 const { getWatchedIdsAction } = await import("@/actions/watchlist");
@@ -43,7 +49,7 @@ export function WatchedProvider({ children, initialWatchedIds = [] }: WatchedPro
         };
 
         fetchWatched();
-    }, []);
+    }, [status]);
 
     // Optimistic UI updates
     const [optimisticWatchedIds, setOptimisticWatchedIds] = useOptimistic(
@@ -62,6 +68,11 @@ export function WatchedProvider({ children, initialWatchedIds = [] }: WatchedPro
     const isWatched = (id: number) => optimisticWatchedIds.has(id);
 
     const toggleWatched = async (movie: Movie) => {
+        if (!session) {
+            router.push("/login?callbackUrl=" + window.location.pathname);
+            return;
+        }
+
         const id = movie.id;
 
         startTransition(async () => {

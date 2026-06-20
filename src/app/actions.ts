@@ -1,8 +1,13 @@
 "use server";
 
 import { movieService, tvService } from "@/lib/tmdb";
-import { getRecommendationsFromMood, getShowRecommendations, getSeasonRanking, getSimilarContent } from "@/lib/ai";
+import { AIRateLimitInfo, getRecommendationsFromMood, getShowRecommendations, getSeasonRanking, getSimilarContent, isAIRateLimitError } from "@/lib/ai";
 import { Movie, MovieDetails, AIRecommendation, TVSeries } from "@/types/movie";
+
+type AIActionResult<T> = {
+    data: T;
+    rateLimit?: AIRateLimitInfo;
+};
 
 // Actions are async functions that run on the server
 
@@ -53,12 +58,15 @@ export async function getRecommendationsAction(mood: string): Promise<Movie[]> {
     }
 }
 
-export async function getMoodRecommendationsAction(mood: string): Promise<any[]> {
+export async function getMoodRecommendationsAction(mood: string): Promise<AIActionResult<any[]>> {
     try {
-        return await getRecommendationsFromMood(mood);
+        return { data: await getRecommendationsFromMood(mood) };
     } catch (error) {
+        if (isAIRateLimitError(error)) {
+            return { data: [], rateLimit: error.rateLimit };
+        }
         console.error("Failed to get raw AI mood recommendations:", error);
-        return [];
+        return { data: [] };
     }
 }
 
@@ -106,10 +114,10 @@ export async function getSeasonRankingAction(showTitle: string, seasons: any[]) 
     }
 }
 
-export async function getSimilarContentAction(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'movie', tmdbId?: number): Promise<any[]> {
+export async function getSimilarContentAction(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'movie', tmdbId?: number): Promise<AIActionResult<any[]>> {
     try {
         const recommendations = await getSimilarContent(title, overview, genres, type, tmdbId);
-        if (!recommendations.length) return [];
+        if (!recommendations.length) return { data: [] };
 
         // Hydrate with TMDB data
         const results = await Promise.all(
@@ -135,9 +143,12 @@ export async function getSimilarContentAction(title: string, overview: string, g
 
         const validResults = results.filter(Boolean);
         // Deduplicate
-        return Array.from(new Map(validResults.map(item => [item.id, item])).values());
+        return { data: Array.from(new Map(validResults.map(item => [item.id, item])).values()) };
     } catch (error) {
+        if (isAIRateLimitError(error)) {
+            return { data: [], rateLimit: error.rateLimit };
+        }
         console.error("Failed to get similar content:", error);
-        return [];
+        return { data: [] };
     }
 }

@@ -9,6 +9,7 @@ import Image from "./ui/image";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BrainLoader } from "./brain-loader";
 import { cn } from "@/lib/utils";
+import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
 
 interface SimilarMediaProps {
     title: string;
@@ -35,8 +36,16 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
             }, 5000); // 5 seconds delay
 
             try {
-                const results = await getSimilarContentAction(title, overview, genres, type, tmdbId);
+                const response = await getSimilarContentAction(title, overview, genres, type, tmdbId);
+                const results = response.data;
                 if (mounted) {
+                    if (response.rateLimit) {
+                        showAIRateLimitToast(response.rateLimit);
+                        setRecommendations([]);
+                        setLoading(false);
+                        return;
+                    }
+
                     // Deduplicate results based on ID
                     const uniqueResults = results.filter((item, index, self) =>
                         index === self.findIndex((t) => t.id === item.id)

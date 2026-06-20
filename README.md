@@ -54,9 +54,13 @@ MovieFinder is a modern, feature-rich web application designed to help users dis
     MONGODB_URI=your_mongodb_connection_string
     NEXTAUTH_SECRET=your_auth_secret
     TMDB_API_KEY=your_tmdb_api_key
-    GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key
+    GEMINI_API_KEY=your_gemini_api_key
+    GEMINI_MODEL=gemma-4-31b-it
     # Add other necessary keys
     ```
+
+    AI requests are guarded by an in-memory runtime limiter at 15 requests per minute per server process.
+    The one-minute window starts on the first uncached AI request and resets after 60 seconds.
 
 4.  **Run the development server**:
     ```bash
@@ -64,6 +68,32 @@ MovieFinder is a modern, feature-rich web application designed to help users dis
     ```
 
     Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Docker / Dokploy Deployment
+
+This app includes a production `Dockerfile` for Dokploy. In Dokploy, create a Dockerfile-based app from this repository and expose container port `3000`.
+
+Set these environment variables in Dokploy:
+
+```env
+MONGODB_URI=your_mongodb_connection_string
+AUTH_SECRET=your_auth_secret
+NEXTAUTH_SECRET=your_auth_secret
+AUTH_URL=https://your-domain.com
+NEXTAUTH_URL=https://your-domain.com
+AUTH_GOOGLE_ID=your_google_oauth_client_id
+AUTH_GOOGLE_SECRET=your_google_oauth_client_secret
+TMDB_API_KEY=your_tmdb_api_key
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemma-4-31b-it
+OMDB_API_KEY=your_omdb_api_key
+```
+
+For Google OAuth, add this redirect URI in Google Cloud:
+
+```txt
+https://your-domain.com/api/auth/callback/google
+```
 
 ## Contributing
 

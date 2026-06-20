@@ -47,7 +47,7 @@ const tmdbLoader: ImageLoader = ({ src, width, quality }) => {
         else tmdbWidth = 'original';
     }
 
-    return `https://image.tmdb.org/t/p/${tmdbWidth}/${path}`;
+    return `https://image.tmdb.org/t/p/${tmdbWidth}/${path}?w=${width}`;
 };
 
 export default tmdbLoader;

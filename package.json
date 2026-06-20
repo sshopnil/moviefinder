@@ -12,7 +12,6 @@
     "@ai-sdk/google": "^2.0.45",
     "@ai-sdk/openai": "^2.0.80",
     "@langchain/core": "^1.1.6",
-    "@langchain/groq": "^1.0.2",
     "@radix-ui/react-dialog": "^1.1.15",
     "ai": "^5.0.108",
     "bcryptjs": "^3.0.3",

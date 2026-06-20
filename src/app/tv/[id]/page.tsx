@@ -15,6 +15,14 @@ import { SimilarMedia } from "@/components/similar-media";
 import { BrainLoader } from "@/components/brain-loader";
 import { WatchProviders } from "@/components/watch-providers";
 
+async function TVSeasonRanking({ title, seasons }: { title: string; seasons: any[] }) {
+    const seasonRankings = await getSeasonRankingAction(title, seasons) || [];
+
+    if (seasonRankings.length === 0) return null;
+
+    return <SeasonRanking rankings={seasonRankings} seasons={seasons} />;
+}
+
 type Props = {
     params: Promise<{ id: string }>;
     searchParams: Promise<{ season?: string; episode?: string }>;
@@ -29,15 +37,11 @@ export default async function TVPage({ params, searchParams }: Props) {
     let tv;
     let savedStatus = false;
     let watchedStatus = false;
-    let seasonRankings: any[] = [];
 
     try {
         tv = await tvService.getTVDetails(parseInt(id));
 
         if (!tv) return notFound();
-
-        // Fetch ranking in parallel
-        seasonRankings = await getSeasonRankingAction(tv.name, tv.seasons) || [];
 
         // Log view
         // Log view removed to prevent revalidatePath error during render.
@@ -163,11 +167,11 @@ export default async function TVPage({ params, searchParams }: Props) {
                         </div>
 
                         {/* Season Ranking */}
-                        {seasonRankings && seasonRankings.length > 0 && (
-                            <div className="pt-8 border-t border-white/10">
-                                <SeasonRanking rankings={seasonRankings} seasons={tv.seasons} />
-                            </div>
-                        )}
+                        <div className="pt-8 border-t border-white/10 relative min-h-[260px]">
+                            <Suspense fallback={<BrainLoader variant="section" message="RANKING SEASONS" />}>
+                                <TVSeasonRanking title={tv.name} seasons={tv.seasons} />
+                            </Suspense>
+                        </div>
 
                         {/* Seasons Horizontal List */}
                         <div className="space-y-4 pt-4 border-t border-white/10">

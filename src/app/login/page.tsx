@@ -8,7 +8,8 @@ import { googleSignIn } from "@/actions/google-signin";
 async function login(formData: FormData) {
     "use server";
     try {
-        await signIn("credentials", { ...Object.fromEntries(formData), redirectTo: "/" });
+        const callbackUrl = formData.get("callbackUrl")?.toString() || "/";
+        await signIn("credentials", { ...Object.fromEntries(formData), redirectTo: callbackUrl });
     } catch (error) {
         if ((error as Error).message.includes("CredentialsSignin")) {
             // Returning string to client component form action... requires useFormState but here we kept it simple.
@@ -20,7 +21,14 @@ async function login(formData: FormData) {
     }
 }
 
-export default function LoginPage() {
+type Props = {
+    searchParams: Promise<{ callbackUrl?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: Props) {
+    const { callbackUrl } = await searchParams;
+    const safeCallbackUrl = callbackUrl?.startsWith("/") ? callbackUrl : "/";
+
     return (
         <div className="min-h-screen flex items-center justify-center p-4">
             <GlassCard className="w-full max-w-md p-8 space-y-6">
@@ -32,6 +40,7 @@ export default function LoginPage() {
                 </div>
 
                 <form action={login as any} className="space-y-4">
+                    <input type="hidden" name="callbackUrl" value={safeCallbackUrl} />
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-300">Email</label>
                         <input
@@ -74,6 +83,7 @@ export default function LoginPage() {
                 <div className="text-center">
                     <p className="text-sm text-gray-400 mb-4">or</p>
                     <form action={googleSignIn}>
+                        <input type="hidden" name="callbackUrl" value={safeCallbackUrl} />
                         <button type="submit" className="w-full bg-white/10 text-white font-medium py-3 rounded-xl border border-white/20 hover:bg-white/20 transition-colors flex items-center justify-center gap-2 backdrop-blur-sm">
                             <svg className="h-5 w-5" viewBox="0 0 24 24">
                                 <path

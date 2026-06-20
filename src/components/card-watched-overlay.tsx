@@ -4,12 +4,14 @@ import { useWatched } from "@/components/watched-context";
 import { Movie } from "@/types/movie";
 import { Eye, Loader2 } from "lucide-react";
 import { useTransition } from "react";
+import { useSession } from "next-auth/react";
 
 interface CardWatchedOverlayProps {
     movie: Movie;
 }
 
 export function CardWatchedOverlay({ movie }: CardWatchedOverlayProps) {
+    const { status } = useSession();
     const { isWatched, toggleWatched } = useWatched();
     const watched = isWatched(movie.id);
     const [isPending, startTransition] = useTransition();
@@ -22,6 +24,8 @@ export function CardWatchedOverlay({ movie }: CardWatchedOverlayProps) {
             toggleWatched(movie);
         });
     };
+
+    if (status !== "authenticated") return null;
 
     return (
         <>

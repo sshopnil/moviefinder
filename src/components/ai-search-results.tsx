@@ -6,6 +6,7 @@ import { getMoodRecommendationsAction, searchMoviesAction, searchMultiAction } f
 import { MovieGrid } from "@/components/movie-grid";
 import { Movie, TVSeries } from "@/types/movie";
 import { BrainLoader } from "./brain-loader";
+import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
 
 interface AISearchResultsProps {
     mood: string;
@@ -40,9 +41,17 @@ export function AISearchResults({ mood, type, with_genres }: AISearchResultsProp
 
             try {
                 // 1. Get AI Recommendations (Raw)
-                const recommendations = await getMoodRecommendationsAction(mood);
+                const response = await getMoodRecommendationsAction(mood);
+                const recommendations = response.data;
 
                 if (!mounted) return;
+
+                if (response.rateLimit) {
+                    showAIRateLimitToast(response.rateLimit);
+                    setProcessedItems([]);
+                    setError("AI request limit reached.");
+                    return;
+                }
 
                 if (!recommendations || recommendations.length === 0) {
                     setProcessedItems([]);

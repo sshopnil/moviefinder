@@ -1,4 +1,5 @@
-import { ChatGroq } from "@langchain/groq";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { generateText } from "ai";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { z } from "zod";
@@ -6,40 +7,79 @@ import AICache from "@/models/AICache";
 import dbConnect from "@/lib/db";
 import { movieService, tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 
-// Using Llama 3.1 8B Instant (Best balance of speed/cost/quality)
-// Fallback Models (Replacing user-suggested 'Guard' models with actual Chat models that can output JSON)
-const MODELS = [
-    "llama-3.1-8b-instant",       // Primary: Fast & Cheap
-    "llama-3.3-70b-versatile",    // Fallback 1: High Quality
-    "mixtral-8x7b-32768",         // Fallback 2: Good reasoning
-    "gemma2-9b-it"                // Fallback 3: Google's open model
-];
+const AI_MODEL = process.env.GEMINI_MODEL || "gemma-4-31b-it";
+const MAX_RPM = 15;
+const AI_CACHE_DB_TIMEOUT_MS = 1500;
 
-const MAX_RPM = 30; // Groq Limit
+export interface AIRateLimitInfo {
+    limit: number;
+    count: number;
+    retryAfterSeconds: number;
+    resetAt: number;
+}
 
-// In-memory rate limiter (simple counter resets every minute)
-const rateLimiter = {
-    count: 0,
-    resetTime: Date.now() + 60000,
-    checkLimit: function () {
-        const now = Date.now();
-        if (now > this.resetTime) {
-            this.count = 0;
-            this.resetTime = now + 60000;
-        }
-        if (this.count >= MAX_RPM) {
-            return false;
-        }
-        this.count++;
-        return true;
+export class AIRateLimitError extends Error {
+    rateLimit: AIRateLimitInfo;
+
+    constructor(rateLimit: AIRateLimitInfo) {
+        super(`AI request limit reached. Try again in ${rateLimit.retryAfterSeconds}s.`);
+        this.name = "AIRateLimitError";
+        this.rateLimit = rateLimit;
     }
+}
+
+export function isAIRateLimitError(error: unknown): error is AIRateLimitError {
+    return error instanceof AIRateLimitError
+        || (
+            typeof error === "object"
+            && error !== null
+            && (error as { name?: string }).name === "AIRateLimitError"
+            && "rateLimit" in error
+        );
+}
+
+interface AIRateLimitState {
+    count: number;
+    resetAt: number;
+}
+
+const globalForAIRateLimit = globalThis as typeof globalThis & {
+    __movieFinderAIRateLimit?: AIRateLimitState;
 };
 
-// Helper: Timeout wrapper for AI calls
-const callWithTimeout = async (promise: Promise<any>, ms: number) => {
+const aiRateLimit = globalForAIRateLimit.__movieFinderAIRateLimit
+    ?? (globalForAIRateLimit.__movieFinderAIRateLimit = { count: 0, resetAt: 0 });
+
+function getAIKey() {
+    return process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+}
+
+function consumeAIRateLimit() {
+    const now = Date.now();
+
+    if (!aiRateLimit.resetAt || now >= aiRateLimit.resetAt) {
+        aiRateLimit.count = 0;
+        aiRateLimit.resetAt = now + 60_000;
+    }
+
+    const retryAfterSeconds = Math.max(1, Math.ceil((aiRateLimit.resetAt - now) / 1000));
+
+    if (aiRateLimit.count >= MAX_RPM) {
+        throw new AIRateLimitError({
+            limit: MAX_RPM,
+            count: aiRateLimit.count,
+            retryAfterSeconds,
+            resetAt: aiRateLimit.resetAt,
+        });
+    }
+
+    aiRateLimit.count++;
+}
+
+const withCacheTimeout = async (promise: Promise<any>, ms: number) => {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms);
+        timeoutId = setTimeout(() => reject(new Error(`AI cache DB timeout after ${ms}ms`)), ms);
     });
     try {
         const result = await Promise.race([promise, timeoutPromise]);
@@ -51,66 +91,33 @@ const callWithTimeout = async (promise: Promise<any>, ms: number) => {
     }
 };
 
-// Start Helper: Model Fallback Invoker
-async function invokeWithModelFallback(apiKey: string, input: string, totalTimeoutMs: number = 20000, temperature: number = 0.7) {
-    let lastError;
-    const startTime = Date.now();
+async function invokeAI(apiKey: string, input: string, temperature: number = 0.7) {
+    const google = createGoogleGenerativeAI({ apiKey });
 
-    for (const modelName of MODELS) {
-        const elapsed = Date.now() - startTime;
-        const remaining = totalTimeoutMs - elapsed;
+    try {
+        const response = await generateText({
+            model: google(AI_MODEL),
+            prompt: input,
+            temperature,
+        });
 
-        // If we have less than 3s left, don't bother starting a new request, just fallback.
-        // This ensures we respect the user's "wait for 20s" limit effectively.
-        if (remaining < 3000) {
-            console.log(`[AI] Time budget exhausted (Elapsed: ${elapsed}ms). Skipping remaining models to fallback earlier.`);
-            break;
-        }
-
-        // Determine timeout for this specific attempt. 
-        // We cap it at 8s to ensure we can try at least 2-3 models within the 20s budget.
-        const attemptTimeout = Math.min(remaining, 8000);
-
-        try {
-            // Check limits before trying (optional, but good practice to respect global limit if shared)
-            // Ideally we'd have per-model limits, but Groq usually has a total TPM/RPM. 
-            // We'll rely on the API returning 429 to trigger the next model.
-
-            const model = new ChatGroq({
-                apiKey,
-                model: modelName,
-                temperature: temperature,
-            });
-
-            // console.log(`[AI] Trying model: ${modelName} (Timeout: ${attemptTimeout}ms)`);
-            const response = await callWithTimeout(model.invoke(input), attemptTimeout);
-            return response; // Success!
-
-        } catch (error: any) {
-            console.log(`[AI] Model ${modelName} failed: ${error?.message || String(error)}`);
-            lastError = error;
-
-            // If it's NOT a rate limit (429) or timeout, maybe we shouldn't retry? 
-            // Actually, for "try your best", we should strictly retry on almost anything except maybe Auth errors.
-            // Continuing to next model...
-        }
+        return { content: response.text };
+    } catch (error: any) {
+        console.log(`[AI] Model ${AI_MODEL} failed: ${error?.message || String(error)}`);
+        throw error;
     }
-
-    // All models failed or time ran out
-    throw lastError || new Error("All AI models failed or timed out.");
 }
-// End Helper
 
 async function getCachedData(key: string) {
     try {
-        await dbConnect();
+        await withCacheTimeout(dbConnect(), AI_CACHE_DB_TIMEOUT_MS);
         const cache = await AICache.findOne({ key });
         if (cache) {
             console.log(`[AICache] Hit for ${key}`);
             return cache.data;
         }
     } catch (error) {
-        console.log(`[AICache] Error reading key ${key}:`, error);
+        console.log(`[AICache] Skipping cache read for ${key}:`, error instanceof Error ? error.message : error);
     }
     return null;
 }
@@ -119,8 +126,8 @@ async function setCachedData(key: string, data: any) {
     // CRITICAL: NEVER cache fallback results. This ensures we retry AI when available.
     // Check if data is array (recs/similar) or object (insights)
     const isFallback = Array.isArray(data)
-        ? data.length > 0 && data[0].aiMeta?.source === 'fallback'
-        : data?.aiMeta?.source === 'fallback';
+        ? data.length > 0 && (data[0].aiMeta?.source === 'fallback' || data[0].aiMeta?.source === 'rate_limited')
+        : data?.aiMeta?.source === 'fallback' || data?.aiMeta?.source === 'rate_limited';
 
     if (isFallback) {
         console.log(`[AICache] Skipping cache for fallback content: ${key}`);
@@ -128,19 +135,19 @@ async function setCachedData(key: string, data: any) {
     }
 
     try {
-        await dbConnect();
+        await withCacheTimeout(dbConnect(), AI_CACHE_DB_TIMEOUT_MS);
         await AICache.findOneAndUpdate(
             { key },
             {
                 key,
                 data,
-                modelUsed: MODELS[0] // Just logging primary, or we could pass actual model used but simpler to keep schema strict
+                modelUsed: AI_MODEL
             },
             { upsert: true, new: true }
         );
         console.log(`[AICache] Saved ${key}`);
     } catch (error) {
-        console.log(`[AICache] Error saving key ${key}:`, error);
+        console.log(`[AICache] Skipping cache save for ${key}:`, error instanceof Error ? error.message : error);
     }
 }
 
@@ -219,7 +226,7 @@ function cleanLLMOutput(text: string): string {
 }
 
 export async function getRecommendationsFromMood(mood: string) {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = getAIKey();
     if (!apiKey) return [];
 
     // 1. Caching (Bumped to v4 to invalidate old non-normalized scores)
@@ -227,11 +234,7 @@ export async function getRecommendationsFromMood(mood: string) {
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
-    // 2. Check Rate Limit (Primary check)
-    if (!rateLimiter.checkLimit()) {
-        console.warn(`[Groq] Rate limit exceeded. Using fallback for mood: ${mood}`);
-        return await getMoodFallback(mood);
-    }
+    consumeAIRateLimit();
 
     const recommendationSchema = z.object({
         recommendations: z.array(z.object({
@@ -269,8 +272,7 @@ export async function getRecommendationsFromMood(mood: string) {
 
     try {
         const input = await prompt.format({ mood });
-        // Use Model Fallback Invoker
-        const response = await invokeWithModelFallback(apiKey, input, 20000, 0.7);
+        const response = await invokeAI(apiKey, input, 0.7);
 
         const cleaned = cleanLLMOutput(response.content as string);
         const parsed = await parser.parse(cleaned);
@@ -283,7 +285,7 @@ export async function getRecommendationsFromMood(mood: string) {
         await setCachedData(cacheKey, sorted);
         return sorted;
     } catch (error: any) {
-        console.log("AI Recommendation Error (Groq):", error);
+        console.log("AI Recommendation Error:", error);
         // Fallback on any error to ensure results
         return await getMoodFallback(mood);
     }
@@ -387,16 +389,20 @@ async function getMoodFallback(mood: string) {
 }
 
 export async function getMovieInsights(id: number | string, title: string, ratings: any, reviews: any[]) {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = getAIKey();
     if (!apiKey) return null;
 
     const cacheKey = `movie_insights_v4_${id}`;
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
-    // Rate Limit Check
-    if (!rateLimiter.checkLimit()) {
-        return getInsightFallback();
+    try {
+        consumeAIRateLimit();
+    } catch (error) {
+        if (isAIRateLimitError(error)) {
+            return getInsightFallback(error.rateLimit);
+        }
+        throw error;
     }
 
     const insightsSchema = z.object({
@@ -434,8 +440,7 @@ export async function getMovieInsights(id: number | string, title: string, ratin
         });
 
         const input = await prompt.format({ title: title || "Unknown Title", ratingsSummary, reviewsSummary });
-        // Use Model Fallback Invoker
-        const response = await invokeWithModelFallback(apiKey, input, 20000, 0.7);
+        const response = await invokeAI(apiKey, input, 0.7);
 
         const cleaned = cleanLLMOutput(response.content as string);
         const parsed = await parser.parse(cleaned);
@@ -446,21 +451,23 @@ export async function getMovieInsights(id: number | string, title: string, ratin
         return result;
     } catch (error: any) {
         // Log only message to avoid "source map" parsing errors with complex objects
-        console.log(`AI Verdict Error (Groq): ${error?.message || String(error)}`);
+        console.log(`AI Verdict Error: ${error?.message || String(error)}`);
         // Fallback on any error
         return getInsightFallback();
     }
 }
 
-function getInsightFallback() {
+function getInsightFallback(rateLimit?: AIRateLimitInfo) {
     return {
         verdict: "AI verdict is not available - will show after a while",
-        reason: "The AI is currently experiencing high traffic or is taking longer than expected. Please check back later.",
+        reason: rateLimit
+            ? `AI request limit reached. Please try again in ${rateLimit.retryAfterSeconds} seconds.`
+            : "The AI is currently experiencing high traffic or is taking longer than expected. Please check back later.",
         for_whom: "Fans of the genre",
         feeling: "Unknown",
         ending_vibe: "Unknown",
         critics_consensus: "Detailed AI analysis unavailable momentarily.",
-        aiMeta: { source: 'fallback' }
+        aiMeta: rateLimit ? { source: 'rate_limited', rateLimit } : { source: 'fallback' }
     };
 }
 
@@ -473,18 +480,14 @@ export async function getShowRecommendations(showTitle: string, overview: string
 
 // Updated to accept optional tmdbId for fallback
 export async function getSimilarContent(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'tv', tmdbId?: number) {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = getAIKey();
     if (!apiKey) return [];
 
     const cacheKey = `ai_similar_v3_${type}_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
-    // Rate Limit Check
-    if (!rateLimiter.checkLimit()) {
-        console.warn(`[Groq] Rate limit exceeded. Using fallback for similar content: ${title}`);
-        return await getSimilarFallback(title, type, tmdbId, genres);
-    }
+    consumeAIRateLimit();
 
     const recommendationSchema = z.object({
         recommendations: z.array(z.object({
@@ -519,8 +522,7 @@ export async function getSimilarContent(title: string, overview: string, genres:
     try {
         const input = await prompt.format({ type, title, overview, genres: genres.slice(0, 3).join(", ") }); // Limit genres to reduce tokens
 
-        // Use Model Fallback Invoker
-        const response = await invokeWithModelFallback(apiKey, input, 20000, 0.7);
+        const response = await invokeAI(apiKey, input, 0.7);
 
         const cleaned = cleanLLMOutput(response.content as string);
         const parsed = await parser.parse(cleaned);
@@ -539,7 +541,7 @@ export async function getSimilarContent(title: string, overview: string, genres:
         await setCachedData(cacheKey, sorted);
         return sorted;
     } catch (error: any) {
-        console.log("AI Similar Content Error (Groq):", error);
+        console.log("AI Similar Content Error:", error);
         // Fallback on any error
         return await getSimilarFallback(title, type, tmdbId, genres);
     }
@@ -600,16 +602,20 @@ async function getSimilarFallback(title: string, type: 'movie' | 'tv', tmdbId?: 
 
 
 export async function getSeasonRanking(showTitle: string, seasons: any[]) {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = getAIKey();
     if (!apiKey) return null;
 
     const cacheKey = `tv_ranking_v3_${showTitle.toLowerCase().replace(/\s+/g, '_')}`;
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
-    // Rate Limit Check
-    if (!rateLimiter.checkLimit()) {
-        return getSeasonRankingFallback(seasons);
+    try {
+        consumeAIRateLimit();
+    } catch (error) {
+        if (isAIRateLimitError(error)) {
+            return getSeasonRankingFallback(seasons, error.rateLimit);
+        }
+        throw error;
     }
 
     const rankingSchema = z.object({
@@ -646,7 +652,7 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
         });
 
         const input = await prompt.format({ showTitle: showTitle || "Unknown Show", seasonsInfo });
-        const response = await invokeWithModelFallback(apiKey, input, 20000, 0.3);
+        const response = await invokeAI(apiKey, input, 0.3);
 
         const cleaned = cleanLLMOutput(response.content as string);
         const parsed = await parser.parse(cleaned);
@@ -656,13 +662,13 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
         return sorted;
     } catch (error: any) {
         // Safe logging to avoid source map errors
-        console.log(`AI Season Ranking Error (Groq): ${error?.message || String(error)}`);
+        console.log(`AI Season Ranking Error: ${error?.message || String(error)}`);
         // Fallback on any error
         return getSeasonRankingFallback(seasons);
     }
 }
 
-function getSeasonRankingFallback(seasons: any[]) {
+function getSeasonRankingFallback(seasons: any[], rateLimit?: AIRateLimitInfo) {
     // Sort by simple logic: Season number (Latest first or first first?) usually people like early seasons?
     // Or effectively just return them in order.
     // Better: Sort by vote_average if available, otherwise index
@@ -676,6 +682,6 @@ function getSeasonRankingFallback(seasons: any[]) {
         reason: "Ranked based on user ratings (Fallback)",
         audience_reception: "Generally liked",
         critics_consensus: "Ratings based ranking.",
-        aiMeta: { source: 'fallback' }
+        aiMeta: rateLimit ? { source: 'rate_limited', rateLimit } : { source: 'fallback' }
     }));
 }
