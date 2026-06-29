@@ -40,7 +40,7 @@ export default async function MoviePage({ params }: Props) {
         // Log view removed to prevent revalidatePath error during render.
         // History is now tracked via WatchProviders when user plays content.
 
-        const status = await getWatchlistStatusAction(parseInt(id));
+        const status = await getWatchlistStatusAction(parseInt(id), "movie");
         if (status) {
             savedStatus = status.isSaved;
             watchedStatus = status.isWatched;

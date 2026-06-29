@@ -51,17 +51,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 password: { label: "Password", type: "password" },
             },
             authorize: async (credentials) => {
-                await connectToDatabase();
+                const parsedCredentials = await z.object({
+                    email: z.string().email(),
+                    password: z.string().min(6),
+                }).safeParseAsync(credentials);
+
+                if (!parsedCredentials.success) {
+                    return null;
+                }
+
+                const { password } = parsedCredentials.data;
+                const email = parsedCredentials.data.email.toLowerCase();
 
                 try {
-                    const { email, password } = await z.object({
-                        email: z.string().email(),
-                        password: z.string().min(6),
-                    }).parseAsync(credentials);
+                    await connectToDatabase();
 
                     const user = await User.findOne({ email });
 
-                    if (!user) {
+                    if (!user?.password) {
                         return null;
                     }
 
@@ -79,7 +86,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
                 } catch (error) {
                     console.error("Auth Error:", error);
-                    return null;
+                    throw error;
                 }
             },
         }),
@@ -90,13 +97,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     callbacks: {
         async signIn({ user, account }) {
             if (account?.provider === "google") {
-                await connectToDatabase();
                 try {
-                    const existingUser = await User.findOne({ email: user.email });
+                    if (!user.email) {
+                        return false;
+                    }
+
+                    await connectToDatabase();
+
+                    const email = user.email.toLowerCase();
+                    const existingUser = await User.findOne({ email });
                     if (!existingUser) {
                         await User.create({
-                            name: user.name,
-                            email: user.email,
+                            name: user.name || email.split("@")[0],
+                            email,
                             image: user.image,
                             // No password for OAuth users
                         });
@@ -109,17 +122,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             }
             return true;
         },
-        async jwt({ token, user, account }) {
+        async jwt({ token, user, account, trigger, session }) {
+            if (trigger === "update" && session?.user) {
+                if (session.user.name) token.name = session.user.name;
+                if (session.user.email) token.email = session.user.email;
+            }
+
             if (user) {
                 // If this is a sign in
                 if (account?.provider === "google") {
                     // Fetch the user from DB to get the _id if we want consistent IDs
                     // For now, simpler to just start with relaxed schema, but let's try to get the DB ID if possible
-                    await connectToDatabase();
-                    const dbUser = await User.findOne({ email: user.email });
-                    if (dbUser) {
-                        token.id = dbUser._id.toString();
-                    } else {
+                    try {
+                        await connectToDatabase();
+                        const dbUser = user.email
+                            ? await User.findOne({ email: user.email.toLowerCase() })
+                            : null;
+
+                        token.id = dbUser?._id.toString() ?? user.id;
+                    } catch (error) {
+                        console.error("Error loading Google user:", error);
                         token.id = user.id; // Fallback
                     }
                 } else {
@@ -131,6 +153,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session({ session, token }) {
             if (session.user) {
                 session.user.id = token.id as string;
+                session.user.name = token.name ?? null;
+                session.user.email = token.email ?? "";
             }
             return session;
         }

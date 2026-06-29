@@ -1,7 +1,7 @@
 "use client";
 
 import { Play, Check, Eye, Loader2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { TrailerModal } from "@/components/trailer-modal";
 import { WatchlistButton } from "@/components/watchlist-button";
 import { MovieDetails } from "@/types/movie";
@@ -64,6 +64,10 @@ function WatchedButton({ movie, initialIsWatched }: { movie: any, initialIsWatch
     const [isWatched, setIsWatched] = useState(initialIsWatched);
     const [isPending, startTransition] = useTransition();
     const router = useRouter();
+
+    useEffect(() => {
+        setIsWatched(initialIsWatched);
+    }, [initialIsWatched]);
 
     const handleToggle = async () => {
         if (status === "loading") return;

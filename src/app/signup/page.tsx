@@ -2,19 +2,11 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { signupAction } from "@/actions/auth";
+import { signupAction, type SignupState } from "@/actions/auth";
 import { googleSignIn } from "@/actions/google-signin";
 import { GlassCard } from "@/components/ui/glass-card";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
-
-type SignupState = {
-    error?: {
-        name?: string[];
-        email?: string[];
-        password?: string[];
-    } | null;
-};
 
 const initialState: SignupState = {
     error: null,
@@ -47,6 +39,12 @@ export default function SignupPage() {
                 </div>
 
                 <form action={formAction} className="space-y-4">
+                    {state?.error?.form && (
+                        <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                            {state.error.form[0]}
+                        </p>
+                    )}
+
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-300">Name</label>
                         <input

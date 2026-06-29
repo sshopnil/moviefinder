@@ -13,7 +13,7 @@ interface CardWatchedOverlayProps {
 export function CardWatchedOverlay({ movie }: CardWatchedOverlayProps) {
     const { status } = useSession();
     const { isWatched, toggleWatched } = useWatched();
-    const watched = isWatched(movie.id);
+    const watched = isWatched(movie);
     const [isPending, startTransition] = useTransition();
 
     const handleToggle = (e: React.MouseEvent) => {

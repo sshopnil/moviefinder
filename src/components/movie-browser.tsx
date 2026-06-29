@@ -1,7 +1,7 @@
 "use strict";
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Movie } from "@/types/movie";
 import { MovieCard } from "@/components/movie-card";
 import { Search } from "lucide-react";
@@ -11,6 +11,12 @@ interface MovieBrowserProps {
     movies: Movie[];
     title?: string;
     description?: string;
+}
+
+type BrowsableMovie = Movie & { name?: string };
+
+function getMediaTitle(movie: BrowsableMovie) {
+    return movie.title || movie.name || "Untitled";
 }
 
 const SORT_OPTIONS = [
@@ -43,7 +49,7 @@ export function MovieBrowser({ movies, title, description }: MovieBrowserProps) 
         // 1. Search
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
-            result = result.filter(m => m.title.toLowerCase().includes(q));
+            result = result.filter(m => getMediaTitle(m).toLowerCase().includes(q));
         }
 
         // 2. Genre Filter
@@ -72,17 +78,13 @@ export function MovieBrowser({ movies, title, description }: MovieBrowserProps) 
         return result;
     }, [movies, searchQuery, selectedGenre, sortBy]);
 
-    // Reset page when filters change
-    useMemo(() => {
-        setCurrentPage(1);
-    }, [searchQuery, selectedGenre, sortBy]);
-
     // Calculate pagination properties
     const totalItems = filteredAndSortedMovies.length;
     const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const safeCurrentPage = Math.min(currentPage, Math.max(totalPages, 1));
     const paginatedMovies = filteredAndSortedMovies.slice(
-        (currentPage - 1) * itemsPerPage,
-        currentPage * itemsPerPage
+        (safeCurrentPage - 1) * itemsPerPage,
+        safeCurrentPage * itemsPerPage
     );
 
     const handlePageChange = (newPage: number) => {
@@ -100,7 +102,7 @@ export function MovieBrowser({ movies, title, description }: MovieBrowserProps) 
                 {description && <p className="text-gray-400">{description}</p>}
 
                 <p className="text-gray-400 text-sm">
-                    Showing {paginatedMovies.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} movies
+                    Showing {paginatedMovies.length > 0 ? (safeCurrentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(safeCurrentPage * itemsPerPage, totalItems)} of {totalItems} movies
                 </p>
             </div>
 
@@ -147,7 +149,7 @@ export function MovieBrowser({ movies, title, description }: MovieBrowserProps) 
                 <>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
                         {paginatedMovies.map((movie) => (
-                            <MovieCard key={movie.id} movie={movie} />
+                            <MovieCard key={`${movie.media_type || "movie"}:${movie.id}`} movie={movie} />
                         ))}
                     </div>
 
@@ -155,20 +157,20 @@ export function MovieBrowser({ movies, title, description }: MovieBrowserProps) 
                     {totalPages >= 1 && (
                         <div className="flex justify-center items-center gap-4 mt-8 pt-6 border-t border-white/10">
                             <button
-                                onClick={() => handlePageChange(currentPage - 1)}
-                                disabled={currentPage === 1}
+                                onClick={() => handlePageChange(safeCurrentPage - 1)}
+                                disabled={safeCurrentPage === 1}
                                 className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
                             >
                                 Previous
                             </button>
 
                             <span className="text-gray-400 text-sm">
-                                Page <span className="text-white font-medium">{currentPage}</span> of <span className="text-white font-medium">{totalPages}</span>
+                                Page <span className="text-white font-medium">{safeCurrentPage}</span> of <span className="text-white font-medium">{totalPages}</span>
                             </span>
 
                             <button
-                                onClick={() => handlePageChange(currentPage + 1)}
-                                disabled={currentPage === totalPages}
+                                onClick={() => handlePageChange(safeCurrentPage + 1)}
+                                disabled={safeCurrentPage === totalPages}
                                 className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
                             >
                                 Next

@@ -1,7 +1,8 @@
 "use server";
 
 import { movieService, tvService } from "@/lib/tmdb";
-import { AIRateLimitInfo, getRecommendationsFromMood, getShowRecommendations, getSeasonRanking, getSimilarContent, isAIRateLimitError } from "@/lib/ai";
+import { AIRateLimitInfo, getMovieInsights, getRecommendationsFromMood, getShowRecommendations, getSeasonRanking, getSimilarContent, isAIRateLimitError } from "@/lib/ai";
+import { getExternalRatings } from "@/lib/omdb";
 import { Movie, MovieDetails, AIRecommendation, TVSeries } from "@/types/movie";
 
 type AIActionResult<T> = {
@@ -111,6 +112,30 @@ export async function getSeasonRankingAction(showTitle: string, seasons: any[]) 
     } catch (error) {
         console.error("Failed to get season ranking:", error);
         return null;
+    }
+}
+
+export async function getMediaVerdictAction(mediaType: "movie" | "tv", id: number, title: string, releaseDate?: string): Promise<AIActionResult<any | null>> {
+    try {
+        const year = releaseDate ? releaseDate.split("-")[0] : undefined;
+        const [reviewsResult, ratingsResult] = await Promise.allSettled([
+            mediaType === "movie" ? movieService.getMovieReviews(id) : tvService.getTVReviews(id),
+            getExternalRatings(title, year),
+        ]);
+
+        const reviews = reviewsResult.status === "fulfilled" ? reviewsResult.value : [];
+        const ratings = ratingsResult.status === "fulfilled" ? ratingsResult.value : null;
+        const data = await getMovieInsights(id, title, ratings, reviews);
+        const rateLimit = data?.aiMeta?.source === "rate_limited" ? data.aiMeta.rateLimit : undefined;
+
+        return { data, rateLimit };
+    } catch (error) {
+        if (isAIRateLimitError(error)) {
+            return { data: null, rateLimit: error.rateLimit };
+        }
+
+        console.error("Failed to get AI verdict:", error);
+        return { data: null };
     }
 }
 
