@@ -2,9 +2,10 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { UserPasswordForm } from "@/components/user-password-form";
-import { History } from "lucide-react";
 import { getRecentlyViewedAction } from "@/actions/history";
 import { ContinueWatchingRow } from "@/components/continue-watching-row";
+import { ProfileEditForm } from "@/components/profile-edit-form";
+import { FeedbackForm } from "@/components/feedback-form";
 
 export default async function DashboardPage() {
     const session = await auth();
@@ -28,15 +29,8 @@ export default async function DashboardPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <GlassCard className="space-y-6">
-                    <h2 className="text-2xl font-semibold text-white mb-4">Profile</h2>
-                    <div className="space-y-1">
-                        <label className="text-sm text-gray-400">Name</label>
-                        <div className="text-lg text-white">{session.user.name}</div>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-sm text-gray-400">Email</label>
-                        <div className="text-lg text-white">{session.user.email}</div>
-                    </div>
+                    <h2 className="text-2xl font-semibold text-white mb-4">Edit Profile</h2>
+                    <ProfileEditForm name={session.user.name || ""} email={session.user.email || ""} />
                     <div className="space-y-1">
                         <label className="text-sm text-gray-400">Account Type</label>
                         <div className="text-lg text-white capitalize">
@@ -49,6 +43,16 @@ export default async function DashboardPage() {
                 <GlassCard className="space-y-6">
                     <h2 className="text-2xl font-semibold text-white mb-4">Security</h2>
                     <UserPasswordForm userEmail={session.user.email!} />
+                </GlassCard>
+            </div>
+
+            <div className="mt-8">
+                <GlassCard className="space-y-6">
+                    <div>
+                        <h2 className="text-2xl font-semibold text-white mb-2">App Feedback</h2>
+                        <p className="text-sm text-gray-400">Report bugs, request features, or send general feedback.</p>
+                    </div>
+                    <FeedbackForm />
                 </GlassCard>
             </div>
         </main>

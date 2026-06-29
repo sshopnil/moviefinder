@@ -8,6 +8,76 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import crypto from "crypto";
 
+const UpdateProfileSchema = z.object({
+    name: z.string().trim().min(2, "Name must be at least 2 characters").max(60, "Name cannot be more than 60 characters"),
+    email: z.string().trim().toLowerCase().email("Invalid email address"),
+});
+
+export type UpdateProfileState = {
+    error?: string;
+    success?: string;
+    user?: {
+        name: string;
+        email: string;
+    };
+} | null;
+
+export async function updateUserProfile(_prevState: UpdateProfileState, formData: FormData): Promise<UpdateProfileState> {
+    try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return { error: "Not authenticated" };
+        }
+
+        const parsed = UpdateProfileSchema.safeParse({
+            name: formData.get("name"),
+            email: formData.get("email"),
+        });
+
+        if (!parsed.success) {
+            return { error: parsed.error.issues[0]?.message || "Invalid profile details" };
+        }
+
+        await connectToDatabase();
+
+        const existingEmailUser = await User.findOne({
+            email: parsed.data.email,
+            _id: { $ne: session.user.id },
+        });
+
+        if (existingEmailUser) {
+            return { error: "Email already in use" };
+        }
+
+        const user = await User.findByIdAndUpdate(
+            session.user.id,
+            { name: parsed.data.name, email: parsed.data.email },
+            { new: true }
+        );
+
+        if (!user) {
+            return { error: "User not found" };
+        }
+
+        revalidatePath("/dashboard");
+
+        return {
+            success: "Profile updated successfully",
+            user: {
+                name: user.name,
+                email: user.email,
+            },
+        };
+    } catch (error) {
+        if ((error as { code?: number }).code === 11000) {
+            return { error: "Email already in use" };
+        }
+
+        console.error("Error updating profile:", error);
+        return { error: "Failed to update profile" };
+    }
+}
+
 const ChangePasswordSchema = z.object({
     currentPassword: z.string().optional(),
     newPassword: z.string().min(6, "Password must be at least 6 characters"),

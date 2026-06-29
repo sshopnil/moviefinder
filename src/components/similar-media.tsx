@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getSimilarContentAction } from "@/app/actions";
-import { GlassCard } from "./ui/glass-card";
-import { Sparkles, Tv, ArrowRight, Star, Quote, Heart, Zap, PlayCircle, Users, Info } from "lucide-react";
+import { Sparkles, Star, Quote, Heart, PlayCircle, Users, Info } from "lucide-react";
 import Link from "next/link";
 import Image from "./ui/image";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BrainLoader } from "./brain-loader";
-import { cn } from "@/lib/utils";
 import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
 
 interface SimilarMediaProps {
@@ -19,63 +17,110 @@ interface SimilarMediaProps {
     tmdbId?: number;
 }
 
+type SimilarMediaItem = {
+    id: number;
+    media_type?: "movie" | "tv";
+    backdrop_path?: string | null;
+    poster_path?: string | null;
+    title?: string;
+    name?: string;
+    vote_average?: number;
+    release_date?: string;
+    first_air_date?: string;
+    overview?: string;
+    aiMeta?: {
+        relevance_score?: number;
+        source?: string;
+        reason?: string;
+        target_audience?: string;
+        emotional_impact?: string;
+        ending_mood?: string;
+        critics_consensus?: string;
+    };
+};
+
 export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarMediaProps) {
-    const [recommendations, setRecommendations] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [recommendations, setRecommendations] = useState<SimilarMediaItem[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [hasRun, setHasRun] = useState(false);
     const [isFallback, setIsFallback] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [loadingText, setLoadingText] = useState("BRAIN IS BRAINING");
 
-    useEffect(() => {
-        let mounted = true;
-        let timer: NodeJS.Timeout;
+    async function fetchSimilar() {
+        setHasRun(true);
+        setLoading(true);
+        setError(null);
+        setIsFallback(false);
+        setLoadingText("BRAIN IS BRAINING");
 
-        async function fetchSimilar() {
-            // Set a timer to change text if it takes too long (e.g., waiting for AI which might timeout)
-            timer = setTimeout(() => {
-                if (mounted) setLoadingText("USING SEMANTIC SEARCH");
-            }, 5000); // 5 seconds delay
+        // Set a timer to change text if it takes too long (e.g., waiting for AI which might timeout)
+        const timer = setTimeout(() => {
+            setLoadingText("USING SEMANTIC SEARCH");
+        }, 5000); // 5 seconds delay
 
-            try {
-                const response = await getSimilarContentAction(title, overview, genres, type, tmdbId);
-                const results = response.data;
-                if (mounted) {
-                    if (response.rateLimit) {
-                        showAIRateLimitToast(response.rateLimit);
-                        setRecommendations([]);
-                        setLoading(false);
-                        return;
-                    }
+        try {
+            const response = await getSimilarContentAction(title, overview, genres, type, tmdbId);
+            const results = response.data;
 
-                    // Deduplicate results based on ID
-                    const uniqueResults = results.filter((item, index, self) =>
-                        index === self.findIndex((t) => t.id === item.id)
-                    );
-                    setRecommendations(uniqueResults);
-
-                    // Check source of first item to determine if fallback
-                    if (uniqueResults.length > 0 && uniqueResults[0].aiMeta?.source === 'fallback') {
-                        setIsFallback(true);
-                    }
-
-                    setLoading(false);
-                }
-            } catch (error) {
-                console.error("Failed to fetch similar media", error);
-                if (mounted) setLoading(false);
-            } finally {
-                clearTimeout(timer);
+            if (response.rateLimit) {
+                showAIRateLimitToast(response.rateLimit);
+                setRecommendations([]);
+                setError("AI recommendation limit reached. Try again in a moment.");
+                return;
             }
-        }
 
-        fetchSimilar();
+            // Deduplicate results based on ID
+            const uniqueResults = results.filter((item, index, self) =>
+                index === self.findIndex((t) => t.id === item.id)
+            );
+            setRecommendations(uniqueResults);
 
-        return () => {
-            mounted = false;
+            // Check source of first item to determine if fallback
+            if (uniqueResults.length > 0 && uniqueResults[0].aiMeta?.source === 'fallback') {
+                setIsFallback(true);
+            }
+
+            if (uniqueResults.length === 0) {
+                setError("No recommendations were found. Try again in a moment.");
+            }
+        } catch (error) {
+            console.error("Failed to fetch similar media", error);
+            setRecommendations([]);
+            setError("AI recommendations failed. Try again in a moment.");
+        } finally {
             clearTimeout(timer);
-        };
-    }, [title, overview, genres, type, tmdbId]);
+            setLoading(false);
+        }
+    }
 
-    if (!loading && recommendations.length === 0) return null;
+    function renderEmptyState() {
+        return (
+            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-6 sm:p-8">
+                <div className="absolute right-0 top-0 p-5 opacity-10">
+                    <Sparkles className="h-28 w-28 text-white" />
+                </div>
+                <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                    <div className="max-w-2xl space-y-2">
+                        <h3 className="text-xl font-bold text-white">Generate AI recommendations</h3>
+                        <p className="text-sm leading-6 text-gray-400">
+                            Ask AI to find movies and series with a similar mood, pacing, audience, and ending vibe.
+                        </p>
+                        {error && <p className="text-sm text-red-300">{error}</p>}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={fetchSimilar}
+                        disabled={loading}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        <Sparkles className="h-4 w-4" />
+                        {hasRun ? "Run Again" : "Run AI Recommendations"}
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200 py-6 relative min-h-[400px]">
@@ -95,36 +140,43 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                         <Info className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
                         <div className="space-y-1">
                             <p className="text-sm font-medium text-yellow-200">
-                                Rate limit exceeded with the main LLM, now showing with semantic search.
+                                The main AI response was unavailable, so these are semantic fallback recommendations.
                             </p>
                         </div>
                     </div>
                 )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {loading
-                    ? <BrainLoader variant="section" message={loadingText} />
-                    : recommendations.map((item: any, idx) => {
-                        const rawScore = item.aiMeta.relevance_score;
+            {loading ? (
+                <div className="relative min-h-[320px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+                    <BrainLoader variant="section" message={loadingText} />
+                </div>
+            ) : recommendations.length === 0 ? (
+                renderEmptyState()
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {recommendations.map((item, idx) => {
+                        const rawScore = item.aiMeta?.relevance_score ?? 80;
                         const score = rawScore <= 1 ? Math.round(rawScore * 100) : Math.round(rawScore);
+                        const itemTitle = item.title || item.name || "Recommended title";
+                        const itemPath = item.media_type === "tv" ? "tv" : "movie";
 
                         return (
                             <Link
                                 key={item.id}
-                                href={`/${item.media_type === 'movie' ? 'movie' : 'tv'}/${item.id}`}
+                                href={`/${itemPath}/${item.id}`}
                                 className="group block relative h-full hover:scale-[1.01] transition-transform duration-300"
                                 style={{ animationDelay: `${idx * 100}ms` }}
                             >
                                 <div className="h-full flex flex-col relative overflow-hidden bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-xl">
-                                    {/* Header Image Area */}
-                                    <div className="aspect-video w-full relative overflow-hidden">
-                                        <Image
-                                            src={TMDB_IMAGE_URL.backdrop(item.backdrop_path || item.poster_path)}
-                                            fill
-                                            className="object-cover transition-transform duration-700 group-hover:scale-105 opacity-80"
-                                            alt={item.title || item.name}
-                                        />
+                                        {/* Header Image Area */}
+                                        <div className="aspect-video w-full relative overflow-hidden">
+                                            <Image
+                                                src={TMDB_IMAGE_URL.backdrop(item.backdrop_path || item.poster_path || null)}
+                                                fill
+                                                className="object-cover transition-transform duration-700 group-hover:scale-105 opacity-80"
+                                                alt={itemTitle}
+                                            />
                                         <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/40 to-transparent" />
 
                                         {/* Match Badge */}
@@ -132,7 +184,7 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                                             <div className="bg-blue-600 font-bold text-white text-[10px] px-2 py-1 rounded-md shadow-lg border border-blue-400/50">
                                                 {score}% Match
                                             </div>
-                                            {item.aiMeta.source === 'fallback' && (
+                                            {item.aiMeta?.source === 'fallback' && (
                                                 <div className="bg-yellow-500/90 font-bold text-white text-[9px] px-2 py-0.5 rounded-md shadow-lg border border-yellow-400/50 uppercase tracking-wider">
                                                     Semantic
                                                 </div>
@@ -151,7 +203,7 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                                                 </div>
                                             </div>
                                             <h3 className="text-xl font-bold text-white leading-tight drop-shadow-md">
-                                                {item.title || item.name}
+                                                {itemTitle}
                                             </h3>
                                         </div>
                                     </div>
@@ -166,7 +218,7 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                                                 Why it matches your mood
                                             </div>
                                             {item.aiMeta?.reason ? (
-                                                <p className="text-sm text-gray-300 italic leading-relaxed">"{item.aiMeta.reason}"</p>
+                                                <p className="text-sm text-gray-300 italic leading-relaxed">&quot;{item.aiMeta.reason}&quot;</p>
                                             ) : (
                                                 <div className="mb-3">
                                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
@@ -219,7 +271,7 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                                                         Critics Consensus
                                                     </div>
                                                     <p className="text-xs text-gray-400 italic">
-                                                        "{item.aiMeta.critics_consensus}"
+                                                        &quot;{item.aiMeta.critics_consensus}&quot;
                                                     </p>
                                                 </div>
                                             </>
@@ -251,7 +303,8 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                             </Link>
                         )
                     })}
-            </div>
+                </div>
+            )}
         </div>
     );
 }

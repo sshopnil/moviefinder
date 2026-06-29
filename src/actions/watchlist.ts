@@ -5,15 +5,50 @@ import connectToDatabase from "@/lib/db";
 import Watchlist from "@/models/Watchlist";
 import { revalidatePath } from "next/cache";
 
-export async function toggleWatchlistAction(movie: {
+type WatchlistMediaType = "movie" | "tv";
+
+type WatchlistInput = {
     id: number;
     title: string;
     poster_path: string | null;
     vote_average: number;
     release_date?: string;
     genre_ids?: number[];
-    media_type?: "movie" | "tv";
-}) {
+    media_type?: WatchlistMediaType;
+};
+
+function getMediaType(mediaType?: WatchlistMediaType): WatchlistMediaType {
+    return mediaType === "tv" ? "tv" : "movie";
+}
+
+function getStoredMovieId(id: number, mediaType?: WatchlistMediaType) {
+    return getMediaType(mediaType) === "tv" ? -Math.abs(id) : id;
+}
+
+function getPublicMovieId(storedMovieId: number, mediaType?: WatchlistMediaType) {
+    return getMediaType(mediaType) === "tv" ? Math.abs(storedMovieId) : storedMovieId;
+}
+
+function getStatusQuery(userId: string, id: number, mediaType?: WatchlistMediaType) {
+    const type = getMediaType(mediaType);
+    const storedMovieId = getStoredMovieId(id, type);
+    const legacyMovieId = type === "tv" ? id : undefined;
+
+    return {
+        userId,
+        media_type: type,
+        movieId: legacyMovieId ? { $in: [storedMovieId, legacyMovieId] } : storedMovieId,
+    };
+}
+
+function revalidateMediaPaths(id: number, mediaType?: WatchlistMediaType) {
+    const type = getMediaType(mediaType);
+    revalidatePath("/watchlist");
+    revalidatePath("/dashboard");
+    revalidatePath(`/${type}/${id}`);
+}
+
+export async function toggleWatchlistAction(movie: WatchlistInput) {
     let session;
     try {
         session = await auth();
@@ -27,58 +62,31 @@ export async function toggleWatchlistAction(movie: {
 
     await connectToDatabase();
 
-    const existing = await Watchlist.findOne({
-        userId: session.user.id,
-        movieId: movie.id,
-    });
+    const mediaType = getMediaType(movie.media_type);
+    const existing = await Watchlist.findOne(getStatusQuery(session.user.id, movie.id, mediaType));
 
     if (existing) {
-        if (existing.watched) {
-            // If it was watched, we might want to just unwatch it? Or remove it entirely?
-            // Standard behavior for "watchlist" toggle usually removes it.
-            // But if we have a separate "watched" toggle, we need to decide.
-            // Let's keep this as "toggle watchlist" (add/remove from list).
-            // If removing, it deletes the record, so watched status is lost.
-            await Watchlist.findByIdAndDelete(existing._id);
-            revalidatePath("/watchlist");
-            revalidatePath("/dashboard");
-            revalidatePath(`/movie/${movie.id}`);
-            return { added: false };
-        } else {
-            await Watchlist.findByIdAndDelete(existing._id);
-            revalidatePath("/watchlist");
-            revalidatePath("/dashboard");
-            revalidatePath(`/movie/${movie.id}`);
-            return { added: false };
-        }
+        await Watchlist.findByIdAndDelete(existing._id);
+        revalidateMediaPaths(movie.id, mediaType);
+        return { added: false };
     } else {
         await Watchlist.create({
             userId: session.user.id,
-            movieId: movie.id,
+            movieId: getStoredMovieId(movie.id, mediaType),
             title: movie.title,
             poster_path: movie.poster_path,
             vote_average: movie.vote_average,
             release_date: movie.release_date,
             genre_ids: movie.genre_ids,
             watched: false,
-            media_type: movie.media_type || "movie", // Default to movie if not provided
+            media_type: mediaType,
         });
-        revalidatePath("/watchlist");
-        revalidatePath("/dashboard");
-        revalidatePath(`/movie/${movie.id}`);
+        revalidateMediaPaths(movie.id, mediaType);
         return { added: true };
     }
 }
 
-export async function toggleWatchedAction(movie: {
-    id: number;
-    title: string;
-    poster_path: string | null;
-    vote_average: number;
-    release_date?: string;
-    genre_ids?: number[];
-    media_type?: "movie" | "tv";
-}) {
+export async function toggleWatchedAction(movie: WatchlistInput) {
     let session;
     try {
         session = await auth();
@@ -92,10 +100,8 @@ export async function toggleWatchedAction(movie: {
 
     await connectToDatabase();
 
-    const existing = await Watchlist.findOne({
-        userId: session.user.id,
-        movieId: movie.id,
-    });
+    const mediaType = getMediaType(movie.media_type);
+    const existing = await Watchlist.findOne(getStatusQuery(session.user.id, movie.id, mediaType));
 
     if (existing) {
         // Toggle watched status
@@ -105,26 +111,24 @@ export async function toggleWatchedAction(movie: {
         // Create new entry with watched = true
         await Watchlist.create({
             userId: session.user.id,
-            movieId: movie.id,
+            movieId: getStoredMovieId(movie.id, mediaType),
             title: movie.title,
             poster_path: movie.poster_path,
             vote_average: movie.vote_average,
             release_date: movie.release_date,
             genre_ids: movie.genre_ids,
             watched: true,
-            media_type: movie.media_type || "movie",
+            media_type: mediaType,
         });
     }
 
-    revalidatePath("/watchlist");
-    revalidatePath("/dashboard");
-    revalidatePath(`/movie/${movie.id}`);
+    revalidateMediaPaths(movie.id, mediaType);
 
     // Return the new state
     return { watched: existing ? existing.watched : true };
 }
 
-export async function getWatchlistStatusAction(movieId: number) {
+export async function getWatchlistStatusAction(movieId: number, mediaType: WatchlistMediaType = "movie") {
     let session;
     try {
         session = await auth();
@@ -135,10 +139,7 @@ export async function getWatchlistStatusAction(movieId: number) {
     if (!session?.user?.id) return { isSaved: false, isWatched: false };
 
     await connectToDatabase();
-    const existing = await Watchlist.findOne({
-        userId: session.user.id,
-        movieId,
-    });
+    const existing = await Watchlist.findOne(getStatusQuery(session.user.id, movieId, mediaType));
 
     return {
         isSaved: !!existing,
@@ -164,7 +165,7 @@ export async function getWatchlistAction() {
     return watchlist.map(item => {
         const isTV = item.media_type === "tv";
         return {
-            id: item.movieId,
+            id: getPublicMovieId(item.movieId, item.media_type),
             title: !isTV ? item.title : undefined,
             name: isTV ? item.title : undefined, // Map title to name for TV
             media_type: item.media_type || "movie",
@@ -199,13 +200,13 @@ export async function getWatchedIdsAction() {
 
     await connectToDatabase();
 
-    // Fetch only movieId field for watched items
+    // Fetch only fields needed for watched keys
     const watchedItems = await Watchlist.find(
         { userId: session.user.id, watched: true },
-        { movieId: 1 }
+        { movieId: 1, media_type: 1 }
     );
 
-    return watchedItems.map(item => item.movieId);
+    return watchedItems.map(item => `${item.media_type || "movie"}:${getPublicMovieId(item.movieId, item.media_type)}`);
 }
 export async function getUserWatchlistAction() {
     let session;
@@ -226,7 +227,7 @@ export async function getUserWatchlistAction() {
     return watchlist.map(item => {
         const isTV = item.media_type === "tv";
         return {
-            id: item.movieId,
+            id: getPublicMovieId(item.movieId, item.media_type),
             title: !isTV ? item.title : undefined,
             name: isTV ? item.title : undefined,
             media_type: item.media_type || "movie",

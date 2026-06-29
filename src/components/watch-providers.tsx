@@ -19,17 +19,17 @@ interface Props {
     initialEpisode?: number;
 }
 
-type ServerType = "vidsrc" | "superembed" | "2embed";
+type ServerType = "multiembed" | "vidsrcme" | "2embed";
 
 const SERVERS: { id: ServerType; name: string; label: string }[] = [
-    { id: "vidsrc", name: "Standard", label: "Standard Server" },
-    { id: "superembed", name: "Fast (BDIX)", label: "Fast / BDIX" },
-    // { id: "2embed", name: "Backup", label: "Backup Server" },
+    { id: "multiembed", name: "Standard", label: "Standard Server" },
+    { id: "vidsrcme", name: "Backup 1", label: "Backup Server 1" },
+    { id: "2embed", name: "Backup 2", label: "Backup Server 2" },
 ];
 
 export function WatchProviders({ providers, tmdbId, mediaType, seasons, title, poster_path, initialSeason, initialEpisode }: Props) {
     const [showPlayer, setShowPlayer] = useState(false);
-    const [selectedServer, setSelectedServer] = useState<ServerType>("vidsrc");
+    const [selectedServer, setSelectedServer] = useState<ServerType>("multiembed");
 
     // TV State
     const [selectedSeason, setSelectedSeason] = useState(initialSeason || 1);
@@ -60,15 +60,17 @@ export function WatchProviders({ providers, tmdbId, mediaType, seasons, title, p
     const getStreamUrl = () => {
         if (mediaType === "movie") {
             switch (selectedServer) {
-                case "vidsrc": return `https://vidsrc.cc/v2/embed/movie/${tmdbId}`;
-                case "superembed": return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`;
-                default: return `https://vidsrc.cc/v2/embed/movie/${tmdbId}`;
+                case "multiembed": return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`;
+                case "vidsrcme": return `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`;
+                case "2embed": return `https://www.2embed.cc/embed/${tmdbId}`;
+                default: return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`;
             }
         } else {
             switch (selectedServer) {
-                case "vidsrc": return `https://vidsrc.cc/v2/embed/tv/${tmdbId}/${selectedSeason}/${selectedEpisode}`;
-                case "superembed": return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${selectedSeason}&e=${selectedEpisode}`;
-                default: return `https://vidsrc.cc/v2/embed/tv/${tmdbId}/${selectedSeason}/${selectedEpisode}`;
+                case "multiembed": return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${selectedSeason}&e=${selectedEpisode}`;
+                case "vidsrcme": return `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${selectedSeason}&episode=${selectedEpisode}`;
+                case "2embed": return `https://www.2embed.cc/embedtv/${tmdbId}&s=${selectedSeason}&e=${selectedEpisode}`;
+                default: return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${selectedSeason}&e=${selectedEpisode}`;
             }
         }
     };
@@ -146,7 +148,7 @@ export function WatchProviders({ providers, tmdbId, mediaType, seasons, title, p
                             onClick={() => {
                                 setShowPlayer(true);
                                 if (title) {
-                                    logViewAction({
+                                    void logViewAction({
                                         id: tmdbId,
                                         type: mediaType,
                                         title: title,

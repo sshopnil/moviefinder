@@ -1,15 +1,24 @@
 import { tvService } from "@/lib/tmdb";
 import { getExternalRatings } from "@/lib/omdb";
-import { getMovieVerdict } from "@/lib/ai";
-import { Star, MessageSquare, Trophy, MonitorPlay, Sparkles, User, Heart, Zap, Quote } from "lucide-react";
+import { Star, MessageSquare, Trophy, MonitorPlay } from "lucide-react";
 import { GlassCard } from "./ui/glass-card";
-import { ExpandableText } from "./ui/expandable-text";
+import { AIVerdictSection } from "./ai-verdict-section";
 
 interface TVReviewsProps {
     id: number;
     title: string;
     firstAirDate?: string;
 }
+
+type TMDBReview = {
+    id: string;
+    author: string;
+    author_details?: {
+        rating?: number;
+    };
+    content: string;
+    url: string;
+};
 
 export async function TVReviews({ id, title, firstAirDate }: TVReviewsProps) {
     const year = firstAirDate ? firstAirDate.split("-")[0] : undefined;
@@ -21,13 +30,6 @@ export async function TVReviews({ id, title, firstAirDate }: TVReviewsProps) {
         getExternalRatings(title, year)
     ]);
 
-    // Use existing AI logic (it's generic enough for "Title")
-    const insights = await getMovieVerdict(id, title, ratings, tmdbReviews);
-
-    if (tmdbReviews.length === 0 && !ratings && !insights) {
-        return null;
-    }
-
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -35,59 +37,7 @@ export async function TVReviews({ id, title, firstAirDate }: TVReviewsProps) {
                 Reviews & Reception
             </h2>
 
-            {/* AI Insights */}
-            {insights && (
-                <div className="grid gap-6 md:grid-cols-1">
-                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/20 p-6 shadow-lg transform transition-all hover:scale-[1.01]">
-                        <div className="absolute top-0 right-0 p-4 opacity-10">
-                            <Sparkles className="h-24 w-24 text-white" />
-                        </div>
-                        <div className="relative z-10">
-                            <div className="flex items-center gap-2 mb-4">
-                                <Sparkles className="h-5 w-5 text-indigo-400 animate-pulse" />
-                                <span className="text-sm font-bold text-indigo-300 uppercase tracking-wider">AI Verdict</span>
-                            </div>
-                            <h3 className="text-2xl sm:text-3xl font-extrabold text-white mb-2">{insights.verdict}</h3>
-                            <p className="text-lg text-gray-200 italic mb-6">"{insights.reason}"</p>
-
-                            <div className="grid sm:grid-cols-3 gap-4 pt-4 border-t border-white/10">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2 text-indigo-300 mb-1">
-                                        <User className="h-4 w-4" />
-                                        <span className="text-xs font-bold uppercase tracking-wider">For Whom</span>
-                                    </div>
-                                    <p className="text-sm text-gray-300 font-medium leading-normal">{insights.for_whom}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2 text-pink-300 mb-1">
-                                        <Heart className="h-4 w-4" />
-                                        <span className="text-xs font-bold uppercase tracking-wider">Feeling</span>
-                                    </div>
-                                    <p className="text-sm text-gray-300 font-medium leading-normal">{insights.feeling}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2 text-amber-300 mb-1">
-                                        <Zap className="h-4 w-4" />
-                                        <span className="text-xs font-bold uppercase tracking-wider">Ending Vibe</span>
-                                    </div>
-                                    <p className="text-sm text-gray-300 font-medium leading-normal">{insights.ending_vibe}</p>
-                                </div>
-                            </div>
-
-                            {/* Critics Consensus */}
-                            {insights.critics_consensus && (
-                                <div className="mt-6 pt-4 border-t border-white/10">
-                                    <div className="flex items-center gap-2 text-emerald-300 mb-2">
-                                        <Quote className="h-4 w-4" />
-                                        <span className="text-xs font-bold uppercase tracking-wider">Critics Consensus</span>
-                                    </div>
-                                    <ExpandableText text={insights.critics_consensus} maxLines={3} />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+            <AIVerdictSection mediaType="tv" id={id} title={title} releaseDate={firstAirDate} />
 
             {/* External Ratings (OMDb) */}
             {ratings && (
@@ -135,7 +85,7 @@ export async function TVReviews({ id, title, firstAirDate }: TVReviewsProps) {
                 <h3 className="text-lg font-semibold text-white mb-4">User Reviews</h3>
                 {tmdbReviews.length > 0 ? (
                     <div className="grid gap-4">
-                        {tmdbReviews.slice(0, 3).map((review: any) => (
+                        {tmdbReviews.slice(0, 3).map((review: TMDBReview) => (
                             <div key={review.id} className="bg-white/5 rounded-xl p-6 border border-white/5 hover:border-white/10 transition-colors">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-3">

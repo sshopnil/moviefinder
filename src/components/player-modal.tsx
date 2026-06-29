@@ -56,7 +56,7 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
                         });
                     }
                 }
-            } catch (err) {
+            } catch {
                 // Ignore parse errors from other sources
             }
         };
@@ -143,12 +143,13 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
                 </div>
 
                 <iframe
+                    key={url}
                     ref={iframeRef}
                     src={url}
                     title="Media Player"
                     className="w-full h-full flex-1 border-0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    sandbox="allow-forms allow-scripts allow-same-origin allow-presentation allow-popups allow-modals allow-storage-access-by-user-activation"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture"
+                    referrerPolicy="no-referrer"
                     allowFullScreen
                 />
             </div>

@@ -30,7 +30,7 @@ const WatchlistSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-// Compound index to ensure a user can only add a movie once
-WatchlistSchema.index({ userId: 1, movieId: 1 }, { unique: true });
+// Compound index to ensure a user can only add a media item once.
+WatchlistSchema.index({ userId: 1, media_type: 1, movieId: 1 }, { unique: true });
 
 export default mongoose.models.Watchlist || mongoose.model("Watchlist", WatchlistSchema);

@@ -1,33 +1,56 @@
 import { GlassCard } from "@/components/ui/glass-card";
 import Link from "next/link";
 import { signIn } from "@/auth";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { googleSignIn } from "@/actions/google-signin";
+import { AuthError } from "next-auth";
+
+function getSafeCallbackUrl(callbackUrl?: string | null) {
+    if (callbackUrl?.startsWith("/") && !callbackUrl.startsWith("//")) {
+        return callbackUrl;
+    }
+
+    return "/";
+}
 
 // Simple login form using server action wrapper for signIn
 async function login(formData: FormData) {
     "use server";
+
+    const callbackUrl = getSafeCallbackUrl(formData.get("callbackUrl")?.toString());
+
     try {
-        const callbackUrl = formData.get("callbackUrl")?.toString() || "/";
-        await signIn("credentials", { ...Object.fromEntries(formData), redirectTo: callbackUrl });
+        await signIn("credentials", {
+            email: formData.get("email")?.toString() || "",
+            password: formData.get("password")?.toString() || "",
+            redirectTo: callbackUrl,
+        });
     } catch (error) {
-        if ((error as Error).message.includes("CredentialsSignin")) {
-            // Returning string to client component form action... requires useFormState but here we kept it simple.
-            // In a real app we'd redirect to error page or use useFormState.
-            // For now, let's just let it be.
-            const err = "Invalid credentials";
+        if (error instanceof AuthError) {
+            const message = error.type === "CredentialsSignin"
+                ? "Invalid email or password."
+                : "Unable to sign in. Please try again.";
+            const params = new URLSearchParams({ error: message });
+
+            if (callbackUrl !== "/") {
+                params.set("callbackUrl", callbackUrl);
+            }
+
+            redirect(`/login?${params.toString()}`);
         }
-        throw error; // Rethrow to let NextAuth handle redirect
+
+        unstable_rethrow(error);
+        throw error;
     }
 }
 
 type Props = {
-    searchParams: Promise<{ callbackUrl?: string }>;
+    searchParams: Promise<{ callbackUrl?: string; error?: string; success?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: Props) {
-    const { callbackUrl } = await searchParams;
-    const safeCallbackUrl = callbackUrl?.startsWith("/") ? callbackUrl : "/";
+    const { callbackUrl, error, success } = await searchParams;
+    const safeCallbackUrl = getSafeCallbackUrl(callbackUrl);
 
     return (
         <div className="min-h-screen flex items-center justify-center p-4">
@@ -39,7 +62,19 @@ export default async function LoginPage({ searchParams }: Props) {
                     <p className="text-gray-400">Log in to your account</p>
                 </div>
 
-                <form action={login as any} className="space-y-4">
+                {success && (
+                    <p className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-200">
+                        {success}
+                    </p>
+                )}
+
+                {error && (
+                    <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                        {error}
+                    </p>
+                )}
+
+                <form action={login} className="space-y-4">
                     <input type="hidden" name="callbackUrl" value={safeCallbackUrl} />
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-300">Email</label>
@@ -109,7 +144,7 @@ export default async function LoginPage({ searchParams }: Props) {
                 </div>
 
                 <div className="text-center text-sm text-gray-400 mt-4">
-                    Don't have an account?{" "}
+                    Don&apos;t have an account?{" "}
                     <Link href="/signup" className="text-white hover:underline">
                         Sign up
                     </Link>
