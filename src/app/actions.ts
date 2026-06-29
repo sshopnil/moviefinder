@@ -115,6 +115,25 @@ export async function getSeasonRankingAction(showTitle: string, seasons: any[]) 
     }
 }
 
+export async function getSourceRecommendationsAction(type: "movie" | "tv", tmdbId: number) {
+    try {
+        const results = type === "movie"
+            ? await movieService.getSimilar(tmdbId)
+            : await tvService.getSimilar(tmdbId);
+
+        return results
+            .filter(item => item.id !== tmdbId)
+            .slice(0, 10)
+            .map(item => ({
+                ...item,
+                media_type: type,
+            }));
+    } catch (error) {
+        console.error("Failed to get source recommendations:", error);
+        return [];
+    }
+}
+
 export async function getMediaVerdictAction(mediaType: "movie" | "tv", id: number, title: string, releaseDate?: string): Promise<AIActionResult<any | null>> {
     try {
         const year = releaseDate ? releaseDate.split("-")[0] : undefined;
