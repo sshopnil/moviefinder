@@ -4,8 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { User, LayoutDashboard, LogOut, History as HistoryIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { signOutAction } from "@/actions/signout";
 import { cn } from "@/lib/utils";
+import { signOut, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 interface ProfileMenuProps {
     user: {
@@ -18,6 +19,8 @@ interface ProfileMenuProps {
 export function ProfileMenu({ user }: ProfileMenuProps) {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const router = useRouter();
+    const { update } = useSession();
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -81,7 +84,10 @@ export function ProfileMenu({ user }: ProfileMenuProps) {
                             <button
                                 onClick={async () => {
                                     setIsOpen(false);
-                                    await signOutAction();
+                                    await signOut({ redirect: false });
+                                    await update();
+                                    router.refresh();
+                                    router.replace("/");
                                 }}
                                 className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
                             >

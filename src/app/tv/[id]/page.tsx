@@ -7,21 +7,13 @@ import { notFound, redirect } from "next/navigation";
 import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
 import { getWatchlistStatusAction } from "@/actions/watchlist";
-import { getSeasonRankingAction } from "@/app/actions";
 import { Suspense } from "react";
-import { SeasonRanking } from "@/components/season-ranking";
 import { TVReviews } from "@/components/tv-reviews";
 import { SimilarMedia } from "@/components/similar-media";
 import { BrainLoader } from "@/components/brain-loader";
 import { WatchProviders } from "@/components/watch-providers";
-
-async function TVSeasonRanking({ title, seasons }: { title: string; seasons: any[] }) {
-    const seasonRankings = await getSeasonRankingAction(title, seasons) || [];
-
-    if (seasonRankings.length === 0) return null;
-
-    return <SeasonRanking rankings={seasonRankings} seasons={seasons} />;
-}
+import { SourceRecommendations } from "@/components/source-recommendations";
+import { SeasonRankingSection } from "@/components/season-ranking-section";
 
 type Props = {
     params: Promise<{ id: string }>;
@@ -168,9 +160,7 @@ export default async function TVPage({ params, searchParams }: Props) {
 
                         {/* Season Ranking */}
                         <div className="pt-8 border-t border-white/10 relative min-h-[260px]">
-                            <Suspense fallback={<BrainLoader variant="section" message="RANKING SEASONS" />}>
-                                <TVSeasonRanking title={tv.name} seasons={tv.seasons} />
-                            </Suspense>
+                            <SeasonRankingSection title={tv.name} seasons={tv.seasons} />
                         </div>
 
                         {/* Seasons Horizontal List */}
@@ -231,6 +221,13 @@ export default async function TVPage({ params, searchParams }: Props) {
                         <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[300px]">
                             <Suspense fallback={<BrainLoader variant="section" />}>
                                 <TVReviews id={tv.id} title={tv.name} firstAirDate={tv.first_air_date} />
+                            </Suspense>
+                        </div>
+
+                        {/* Similar Series (TMDB Source Recommendations) */}
+                        <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[400px]">
+                            <Suspense fallback={<BrainLoader variant="section" message="LOADING SOURCE PICKS" />}>
+                                <SourceRecommendations tmdbId={tv.id} type="tv" />
                             </Suspense>
                         </div>
 

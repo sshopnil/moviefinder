@@ -1,9 +1,7 @@
 import { GlassCard } from "@/components/ui/glass-card";
 import Link from "next/link";
-import { signIn } from "@/auth";
-import { redirect, unstable_rethrow } from "next/navigation";
 import { googleSignIn } from "@/actions/google-signin";
-import { AuthError } from "next-auth";
+import { LoginForm } from "@/components/login-form";
 
 function getSafeCallbackUrl(callbackUrl?: string | null) {
     if (callbackUrl?.startsWith("/") && !callbackUrl.startsWith("//")) {
@@ -11,37 +9,6 @@ function getSafeCallbackUrl(callbackUrl?: string | null) {
     }
 
     return "/";
-}
-
-// Simple login form using server action wrapper for signIn
-async function login(formData: FormData) {
-    "use server";
-
-    const callbackUrl = getSafeCallbackUrl(formData.get("callbackUrl")?.toString());
-
-    try {
-        await signIn("credentials", {
-            email: formData.get("email")?.toString() || "",
-            password: formData.get("password")?.toString() || "",
-            redirectTo: callbackUrl,
-        });
-    } catch (error) {
-        if (error instanceof AuthError) {
-            const message = error.type === "CredentialsSignin"
-                ? "Invalid email or password."
-                : "Unable to sign in. Please try again.";
-            const params = new URLSearchParams({ error: message });
-
-            if (callbackUrl !== "/") {
-                params.set("callbackUrl", callbackUrl);
-            }
-
-            redirect(`/login?${params.toString()}`);
-        }
-
-        unstable_rethrow(error);
-        throw error;
-    }
 }
 
 type Props = {
@@ -74,46 +41,16 @@ export default async function LoginPage({ searchParams }: Props) {
                     </p>
                 )}
 
-                <form action={login} className="space-y-4">
-                    <input type="hidden" name="callbackUrl" value={safeCallbackUrl} />
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-300">Email</label>
-                        <input
-                            name="email"
-                            type="email"
-                            required
-                            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white/20"
-                            placeholder="john@example.com"
-                        />
-                    </div>
+                <LoginForm callbackUrl={safeCallbackUrl} />
 
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-300">Password</label>
-                        <input
-                            name="password"
-                            type="password"
-                            required
-                            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-white/20"
-                            placeholder="••••••••"
-                        />
-                    </div>
-
-                    <div className="flex justify-end">
-                        <Link
-                            href="/forgot-password"
-                            className="text-sm text-gray-400 hover:text-white transition-colors"
-                        >
-                            Forgot password?
-                        </Link>
-                    </div>
-
-                    <button
-                        type="submit"
-                        className="w-full bg-white text-black font-semibold py-3 rounded-xl hover:bg-gray-200 transition-colors"
+                <div className="flex justify-end">
+                    <Link
+                        href="/forgot-password"
+                        className="text-sm text-gray-400 hover:text-white transition-colors"
                     >
-                        Log In
-                    </button>
-                </form>
+                        Forgot password?
+                    </Link>
+                </div>
 
                 <div className="text-center">
                     <p className="text-sm text-gray-400 mb-4">or</p>

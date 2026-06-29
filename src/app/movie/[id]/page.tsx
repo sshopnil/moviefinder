@@ -14,6 +14,7 @@ import { MovieReviews } from "@/components/movie-reviews";
 import { SimilarMedia } from "@/components/similar-media";
 import { BrainLoader } from "@/components/brain-loader";
 import { WatchProviders } from "@/components/watch-providers";
+import { SourceRecommendations } from "@/components/source-recommendations";
 
 
 // Use generic 'params' type handling available in newer Next.js versions or simple awaitable
@@ -183,6 +184,12 @@ export default async function MoviePage({ params }: Props) {
                         <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[300px]">
                             <Suspense fallback={<BrainLoader variant="section" />}>
                                 <MovieReviews id={movie.id} title={movie.title} releaseDate={movie.release_date} />
+                            </Suspense>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[400px]">
+                            <Suspense fallback={<BrainLoader variant="section" message="LOADING SOURCE PICKS" />}>
+                                <SourceRecommendations tmdbId={movie.id} type="movie" />
                             </Suspense>
                         </div>
 

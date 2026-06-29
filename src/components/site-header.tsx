@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { User, Home, Heart, Github } from "lucide-react";
+import { Home, Heart, Github } from "lucide-react";
 import { HeaderSearchIcon } from "./header-search-icon";
 import { ProfileMenu } from "./profile-menu";
 import { cn } from "@/lib/utils";
