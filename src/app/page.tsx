@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { movieService, tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
+import { movieService, tvService } from "@/lib/tmdb";
 import { MovieGrid } from "@/components/movie-grid";
 import { MovieSection } from "@/components/movie-section";
 import { Movie, TVSeries } from "@/types/movie";
@@ -9,7 +9,6 @@ import { ClientHeader } from "@/components/client-header";
 import { SearchFilters } from "@/components/search-filters";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
-import { BrainLoader } from "@/components/brain-loader";
 import { logSearchAction } from "@/actions/history";
 import { Pagination } from "@/components/pagination";
 import { AISearchResults } from "@/components/ai-search-results";
@@ -53,8 +52,8 @@ export default async function Home(props: {
         <HomeHeader />
         <div className="flex flex-col gap-4">
           <SearchFilters />
-          <Suspense fallback={<BrainLoader variant="section" />}>
-            <AISearchResults mood={mood} type={type} with_genres={with_genres} />
+          <Suspense fallback={null}>
+            <AISearchResults mood={mood} type={type} with_genres={with_genres} page={page} />
           </Suspense>
         </div>
       </main>

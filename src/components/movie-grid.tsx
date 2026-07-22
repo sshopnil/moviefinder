@@ -3,21 +3,25 @@
 import { Movie, TVSeries, AIRecommendation } from "@/types/movie";
 import { MovieCard } from "@/components/movie-card";
 import { AIRecommendationCard } from "@/components/ai-recommendation-card";
+import { AIRecommendationCardSkeleton } from "@/components/ai-result-skeletons";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface MovieGridProps {
     movies: ((Movie | TVSeries) & { aiMeta?: AIRecommendation })[];
     title: string;
+    pendingCount?: number;
 }
 
-export function MovieGrid({ movies, title }: MovieGridProps) {
-    const hasAIRecommendations = movies.some(m => m.aiMeta);
+export function MovieGrid({ movies, title, pendingCount = 0 }: MovieGridProps) {
+    const hasAIRecommendations = pendingCount > 0 || movies.some(m => m.aiMeta);
 
     return (
         <section className="flex-1 mt-8">
-            <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-semibold text-white/90">{title}</h2>
-            </div>
+            {title && (
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-semibold text-white/90">{title}</h2>
+                </div>
+            )}
 
             <motion.div
                 layout
@@ -42,10 +46,15 @@ export function MovieGrid({ movies, title }: MovieGridProps) {
                             )}
                         </motion.div>
                     ))}
+                    {Array.from({ length: pendingCount }, (_, item) => (
+                        <motion.div key={`pending-${item}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                            <AIRecommendationCardSkeleton />
+                        </motion.div>
+                    ))}
                 </AnimatePresence>
             </motion.div>
 
-            {movies.length === 0 && (
+            {movies.length === 0 && pendingCount === 0 && (
                 <div className="text-center py-20 text-gray-500">
                     No movies found. Try a different search.
                 </div>

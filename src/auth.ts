@@ -20,6 +20,17 @@ const googleClientSecret = process.env.AUTH_GOOGLE_SECRET;
 export const { handlers, signIn, signOut, auth } = NextAuth({
     secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
     trustHost: true,
+    cookies: {
+        sessionToken: {
+            name: "moviefinder.session-token.v1",
+            options: {
+                httpOnly: true,
+                sameSite: "lax",
+                path: "/",
+                secure: process.env.NODE_ENV === "production",
+            },
+        },
+    },
     providers: [
         {
             id: "google",

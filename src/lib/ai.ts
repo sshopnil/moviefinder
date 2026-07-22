@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText } from "ai";
+import { generateText, streamObject } from "ai";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { z } from "zod";
@@ -10,6 +10,28 @@ import { movieService, tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 const AI_MODEL = process.env.GEMINI_MODEL || "gemma-4-31b-it";
 const MAX_RPM = 15;
 const AI_CACHE_DB_TIMEOUT_MS = 1500;
+
+const moodRecommendationSchema = z.object({
+    title: z.string().trim().min(1),
+    type: z.string().trim().min(1),
+    reason: z.string().trim().min(10).describe("Brief reason"),
+    relevance_score: z.number().describe("Score (0-100)"),
+    target_audience: z.string().trim().min(3).describe("Audience"),
+    why_watch: z.string().trim().min(10).describe("Why watch"),
+    ending_mood: z.string().trim().min(3).describe("Ending vibe"),
+    emotional_impact: z.string().trim().min(3).describe("Feeling"),
+    critics_consensus: z.string().trim().min(10).describe("Brief consensus summary"),
+});
+
+const seasonRankingSchema = z.object({
+    season_number: z.number(),
+    rank: z.number(),
+    score: z.number(),
+    verdict: z.string(),
+    reason: z.string(),
+    audience_reception: z.string(),
+    critics_consensus: z.string(),
+});
 
 export interface AIRateLimitInfo {
     limit: number;
@@ -227,7 +249,7 @@ function cleanLLMOutput(text: string): string {
 
 export async function getRecommendationsFromMood(mood: string) {
     const apiKey = getAIKey();
-    if (!apiKey) return [];
+    if (!apiKey) return getMoodFallback(mood);
 
     // 1. Caching (Bumped to v4 to invalidate old non-normalized scores)
     const cacheKey = `ai_mood_recs_v5_${mood.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
@@ -291,7 +313,81 @@ export async function getRecommendationsFromMood(mood: string) {
     }
 }
 
-async function getMoodFallback(mood: string) {
+export async function* streamRecommendationsFromMood(
+    mood: string,
+    options: { page?: number; excludeTitles?: string[]; mediaType?: string; refresh?: boolean } = {},
+) {
+    const page = Math.max(1, options.page || 1);
+    const apiKey = getAIKey();
+    if (!apiKey) {
+        for (const recommendation of await getMoodFallback(mood, page)) yield recommendation;
+        return;
+    }
+
+    const mediaType = options.mediaType === "movie" || options.mediaType === "tv" ? options.mediaType : "movie or TV show";
+    const excluded = (options.excludeTitles || []).slice(-30);
+    const cacheKey = `ai_mood_recs_v10_${page}_${options.mediaType || 'all'}_${mood.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
+    if (!options.refresh) {
+        const cached = await getCachedData(cacheKey);
+        if (cached) {
+            for (const recommendation of cached) yield recommendation;
+            return;
+        }
+    }
+
+    consumeAIRateLimit();
+
+    const google = createGoogleGenerativeAI({ apiKey });
+    const generated: unknown[] = [];
+    const generatedTitles = new Set(excluded.map(title => title.toLowerCase()));
+
+    const candidateTarget = 10;
+
+    for (let attempt = 0; attempt < 3 && generated.length < candidateTarget; attempt++) {
+        try {
+            const requestedCount = Math.min(6, candidateTarget - generated.length);
+            const result = streamObject({
+                model: google(AI_MODEL),
+                output: "array",
+                schema: moodRecommendationSchema,
+                temperature: 0.7,
+                maxOutputTokens: 4500,
+                abortSignal: AbortSignal.timeout(30_000),
+                prompt: `Generate batch ${page} of recommendations for this mood: "${mood}".
+Return exactly ${requestedCount} distinct ${mediaType} recommendations.
+Use specific, varied global titles ordered by relevance. Scores must be from 0 to 100.
+Every recommendation must be a real, released title that can be found on TMDB. Complete every text field with specific analysis; never return empty strings.
+Do not include any of these previously shown or generated titles: ${Array.from(generatedTitles).join(", ") || "none"}.`,
+            });
+
+            for await (const recommendation of result.elementStream) {
+                const titleKey = recommendation.title.toLowerCase();
+                if (generatedTitles.has(titleKey)) continue;
+                generatedTitles.add(titleKey);
+
+                const normalized = {
+                    ...recommendation,
+                    type: normalizeMediaType(recommendation.type),
+                    relevance_score: normalizeScore(recommendation.relevance_score),
+                    aiMeta: { source: "ai" },
+                };
+                generated.push(normalized);
+                yield normalized;
+            }
+        } catch (error) {
+            console.log(`AI Recommendation Stream Attempt ${attempt + 1} Error:`, error);
+        }
+    }
+
+    if (generated.length >= 6) {
+        await setCachedData(cacheKey, generated);
+    } else if (generated.length === 0) {
+        const fallback = await getMoodFallback(mood, page);
+        for (const recommendation of fallback) yield recommendation;
+    }
+}
+
+async function getMoodFallback(mood: string, page: number = 1) {
     // Simple fallback: Search TMDB for the mood keyword
     try {
         // 1. Clean the query to be more TMDB-friendly
@@ -313,7 +409,7 @@ async function getMoodFallback(mood: string) {
 
         console.log(`[Fallback] Searching TMDB for cleaned query: "${cleanQuery}" (Original: "${mood}")`);
 
-        const results = await movieService.searchMulti(cleanQuery);
+        const results = await movieService.searchMulti(cleanQuery, page);
         let combined = [...results.movies, ...results.tv].slice(0, 10);
 
         // EXTRA FALLBACK 2: If CLEANED Title Search fails, try KEYWORD DISCOVERY
@@ -321,47 +417,68 @@ async function getMoodFallback(mood: string) {
         if (combined.length === 0) {
             console.log(`[Fallback] Title search 0 results. Trying Keyword Discovery for: "${cleanQuery}"`);
 
-            // 1. Search for matching keywords (Try exact phrase first)
-            let keywords = await movieService.searchKeywords(cleanQuery);
+            const noiseWords = new Set(["best", "good", "great", "older", "younger"]);
+            const words = cleanQuery.split(/\s+/).filter(word => word.length > 2 && !noiseWords.has(word));
+            const semanticQueries = new Set([cleanQuery, ...words]);
 
-            // 2. If exact phrase fails, try individual words
-            if (keywords.length === 0) {
-                const words = cleanQuery.split(/\s+/).filter(w => w.length > 2); // Split by space, ignore short words
-                if (words.length > 1) {
-                    console.log(`[Fallback] Exact keyword failed. Searching words: ${words.join(", ")}`);
-                    const wordResults = await Promise.all(words.map(w => movieService.searchKeywords(w)));
-                    // Flatten and deduplicate
-                    const allKeywords = wordResults.flat();
-                    // Use a Map to deduplicate by ID while keeping objects
-                    const uniqueKeywords = new Map();
-                    allKeywords.forEach(k => uniqueKeywords.set(k.id, k));
-                    keywords = Array.from(uniqueKeywords.values());
-                }
+            if (/love|romance|romantic/i.test(mood)) {
+                semanticQueries.add("romance");
+                semanticQueries.add("love story");
+            }
+            if (/older/i.test(mood) && /younger/i.test(mood)) {
+                semanticQueries.add("age difference");
+                semanticQueries.add("older man younger woman");
+                semanticQueries.add("older woman younger man");
+                semanticQueries.add("intergenerational relationship");
             }
 
+            const keywordSearches = await Promise.all(
+                Array.from(semanticQueries).map(query => movieService.searchKeywords(query))
+            );
+            const uniqueKeywords = new Map<number, { id: number; name: string }>();
+            keywordSearches.flat().forEach(keyword => uniqueKeywords.set(keyword.id, keyword));
+            const keywords = Array.from(uniqueKeywords.values());
+
             if (keywords.length > 0) {
-                // Use top 5 keywords (increased/OR logic)
-                const keywordIds = keywords.slice(0, 5).map(k => k.id).join("|"); // OR logic
-                console.log(`[Fallback] Found keywords: ${keywords.slice(0, 5).map(k => k.name).join(", ")} (IDs: ${keywordIds})`);
+                const keywordIds = keywords.slice(0, 8).map(keyword => keyword.id).join("|");
+                console.log(`[Fallback] Found semantic keywords: ${keywords.slice(0, 8).map(keyword => keyword.name).join(", ")}`);
 
-                const discovery = await movieService.getDiscover({
-                    with_keywords: keywordIds,
-                    sort_by: "popularity.desc"
-                });
+                const [movieDiscovery, tvDiscovery] = await Promise.all([
+                    movieService.getDiscover({
+                        with_keywords: keywordIds,
+                        sort_by: "popularity.desc",
+                        page: page.toString(),
+                    }),
+                    tvService.getDiscover({
+                        with_keywords: keywordIds,
+                        sort_by: "popularity.desc",
+                        page: page.toString(),
+                    }),
+                ]);
 
-                if (discovery.results.length > 0) {
-                    combined = discovery.results.slice(0, 10).map(m => ({ ...m, media_type: 'movie' }));
-                }
+                combined = [
+                    ...movieDiscovery.results.slice(0, 5),
+                    ...tvDiscovery.results.slice(0, 5),
+                ];
             } else {
-                console.log(`[Fallback] No keywords found.`);
+                console.log("[Fallback] No semantic keywords found.");
             }
         }
 
         // EXTRA FALLBACK 3: If still nothing, try RAW query search (in case cleaning removed key parts or if it's a very specific title)
         if (combined.length === 0 && cleanQuery !== mood.toLowerCase()) {
             console.log(`[Fallback] Trying raw query: "${mood}"`);
-            const rawResults = await movieService.searchMulti(mood);
+            const rawResults = await movieService.searchMulti(mood, page);
             combined = [...rawResults.movies, ...rawResults.tv].slice(0, 10);
+        }
+
+        if (combined.length === 0) {
+            console.log("[Fallback] No query matches. Using current popular titles.");
+            const [popularMovies, popularTV] = await Promise.all([
+                movieService.getPopular(),
+                tvService.getPopular(),
+            ]);
+            combined = [...popularMovies.slice(0, 5), ...popularTV.slice(0, 5)];
         }
 
         return combined.map(item => ({
@@ -386,6 +503,10 @@ async function getMoodFallback(mood: string) {
         console.log("Fallback error", e);
         return [];
     }
+}
+
+export async function getSemanticMoodRecommendations(mood: string, page: number = 1) {
+    return getMoodFallback(mood, page);
 }
 
 export async function getMovieInsights(id: number | string, title: string, ratings: any, reviews: any[]) {
@@ -481,7 +602,7 @@ export async function getShowRecommendations(showTitle: string, overview: string
 // Updated to accept optional tmdbId for fallback
 export async function getSimilarContent(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'tv', tmdbId?: number) {
     const apiKey = getAIKey();
-    if (!apiKey) return [];
+    if (!apiKey) return getSimilarFallback(title, type, tmdbId, genres);
 
     const cacheKey = `ai_similar_v3_${type}_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     const cached = await getCachedData(cacheKey);
@@ -547,6 +668,59 @@ export async function getSimilarContent(title: string, overview: string, genres:
     }
 }
 
+export async function* streamSimilarContent(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'tv', tmdbId?: number) {
+    const apiKey = getAIKey();
+    if (!apiKey) {
+        for (const recommendation of await getSimilarFallback(title, type, tmdbId, genres)) yield recommendation;
+        return;
+    }
+
+    const cacheKey = `ai_similar_v3_${type}_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const cached = await getCachedData(cacheKey);
+    if (cached) {
+        for (const recommendation of cached) yield recommendation;
+        return;
+    }
+
+    consumeAIRateLimit();
+
+    const google = createGoogleGenerativeAI({ apiKey });
+    const generated: unknown[] = [];
+
+    try {
+        const result = streamObject({
+            model: google(AI_MODEL),
+            output: "array",
+            schema: moodRecommendationSchema,
+            temperature: 0.7,
+            maxOutputTokens: 6000,
+            abortSignal: AbortSignal.timeout(60_000),
+            prompt: `Suggest 10 movies or TV shows similar to this ${type}: "${title}".
+Overview: ${overview}
+Genres: ${genres.slice(0, 3).join(", ")}
+Match its mood, pacing, audience, and ending vibe. Do not include "${title}". Order by relevance with scores from 0 to 100.`,
+        });
+
+        for await (const recommendation of result.elementStream) {
+            if (recommendation.title.toLowerCase() === title.toLowerCase()) continue;
+            const normalized = {
+                ...recommendation,
+                type: normalizeMediaType(recommendation.type),
+                relevance_score: normalizeScore(recommendation.relevance_score),
+                aiMeta: { source: "ai" },
+            };
+            generated.push(normalized);
+            yield normalized;
+        }
+
+        if (generated.length > 0) await setCachedData(cacheKey, generated);
+    } catch (error) {
+        console.log("AI Similar Content Stream Error:", error);
+        const fallback = await getSimilarFallback(title, type, tmdbId, genres);
+        for (const recommendation of fallback) yield recommendation;
+    }
+}
+
 async function getSimilarFallback(title: string, type: 'movie' | 'tv', tmdbId?: number, genres: string[] = []) {
     try {
         let results: any[] = [];
@@ -574,6 +748,12 @@ async function getSimilarFallback(title: string, type: 'movie' | 'tv', tmdbId?: 
                 // Filter out the item itself
                 results = [...searchRes.movies, ...searchRes.tv].filter(i => (i as any).title !== title && (i as any).name !== title);
             }
+        }
+
+        if (!results || results.length === 0) {
+            results = type === "movie"
+                ? await movieService.getPopular()
+                : await tvService.getPopular();
         }
 
         return results.slice(0, 10).map(item => ({
@@ -665,6 +845,61 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
         console.log(`AI Season Ranking Error: ${error?.message || String(error)}`);
         // Fallback on any error
         return getSeasonRankingFallback(seasons);
+    }
+}
+
+export async function* streamSeasonRanking(showTitle: string, seasons: any[]) {
+    const apiKey = getAIKey();
+    if (!apiKey) {
+        for (const ranking of getSeasonRankingFallback(seasons)) yield ranking;
+        return;
+    }
+
+    const cacheKey = `tv_ranking_v3_${showTitle.toLowerCase().replace(/\s+/g, '_')}`;
+    const cached = await getCachedData(cacheKey);
+    if (cached) {
+        for (const ranking of cached) yield ranking;
+        return;
+    }
+
+    try {
+        consumeAIRateLimit();
+    } catch (error) {
+        if (!isAIRateLimitError(error)) throw error;
+        for (const ranking of getSeasonRankingFallback(seasons, error.rateLimit)) yield ranking;
+        return;
+    }
+
+    const google = createGoogleGenerativeAI({ apiKey });
+    const generated: unknown[] = [];
+    const seasonsInfo = seasons.map((season) =>
+        `Season ${season.season_number}: ${season.name} - ${season.overview}`
+    ).join("\n");
+
+    try {
+        const result = streamObject({
+            model: google(AI_MODEL),
+            output: "array",
+            schema: seasonRankingSchema,
+            temperature: 0.3,
+            maxOutputTokens: 6000,
+            abortSignal: AbortSignal.timeout(60_000),
+            prompt: `Rank the seasons of "${showTitle}" from best to worst.
+Seasons:
+${seasonsInfo}
+Return every season in rank order with a score, verdict, reason, audience reception, and critics consensus.`,
+        });
+
+        for await (const ranking of result.elementStream) {
+            const normalized = { ...ranking, aiMeta: { source: "ai" } };
+            generated.push(normalized);
+            yield normalized;
+        }
+
+        if (generated.length > 0) await setCachedData(cacheKey, generated);
+    } catch (error) {
+        console.log("AI Season Ranking Stream Error:", error);
+        for (const ranking of getSeasonRankingFallback(seasons)) yield ranking;
     }
 }
 

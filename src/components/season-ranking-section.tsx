@@ -1,11 +1,9 @@
 "use client";
 
-import { getSeasonRankingAction } from "@/app/actions";
-import { BrainLoader } from "@/components/brain-loader";
 import { SeasonRanking } from "@/components/season-ranking";
 import { Season } from "@/types/movie";
 import { Loader2, Trophy } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 type Ranking = {
     season_number: number;
@@ -25,42 +23,68 @@ interface SeasonRankingSectionProps {
 export function SeasonRankingSection({ title, seasons }: SeasonRankingSectionProps) {
     const [rankings, setRankings] = useState<Ranking[] | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [isPending, startTransition] = useTransition();
+    const [isPending, setIsPending] = useState(false);
 
     function runRanking() {
         setError(null);
+        setRankings([]);
+        setIsPending(true);
 
-        startTransition(async () => {
+        void (async () => {
             try {
-                const result = await getSeasonRankingAction(title, seasons);
+                const response = await fetch("/api/ai/recommendations", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ mode: "season-ranking", title, seasons }),
+                });
 
-                if (!result || result.length === 0) {
-                    setRankings(null);
-                    setError("Season ranking is unavailable right now.");
-                    return;
+                if (!response.ok || !response.body) throw new Error("Failed to start season ranking stream.");
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+                let resultCount = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    buffer += decoder.decode(value, { stream: !done });
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop() || "";
+
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        const event = JSON.parse(line);
+
+                        if (event.type === "item") {
+                            resultCount++;
+                            setRankings((current) => [...(current || []), event.item].sort((a, b) => a.rank - b.rank));
+                        } else if (event.type === "error" || event.type === "rateLimit") {
+                            setError("Season ranking is unavailable right now.");
+                        }
+                    }
+
+                    if (done) break;
                 }
 
-                setRankings(result);
+                if (resultCount === 0) {
+                    setRankings(null);
+                    setError("Season ranking is unavailable right now.");
+                }
             } catch (error) {
                 console.error("Failed to rank seasons", error);
                 setRankings(null);
                 setError("Season ranking failed. Try again in a moment.");
+            } finally {
+                setIsPending(false);
             }
-        });
+        })();
     }
 
-    if (isPending) {
-        return (
-            <div className="relative min-h-[260px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
-                <BrainLoader variant="section" message="RANKING SEASONS" />
-            </div>
-        );
-    }
-
-    if (rankings) {
+    if (rankings || isPending) {
+        const targetCount = Math.min(Math.max(seasons.length, 2), 5);
         return (
             <div className="space-y-4">
-                <div className="flex justify-end">
+                {!isPending && rankings && rankings.length > 0 && <div className="flex justify-end">
                     <button
                         type="button"
                         onClick={runRanking}
@@ -69,8 +93,12 @@ export function SeasonRankingSection({ title, seasons }: SeasonRankingSectionPro
                         <Trophy className="h-4 w-4" />
                         Rank Again
                     </button>
-                </div>
-                <SeasonRanking rankings={rankings} seasons={seasons} />
+                </div>}
+                <SeasonRanking
+                    rankings={rankings || []}
+                    seasons={seasons}
+                    pendingCount={isPending ? Math.max(0, targetCount - (rankings?.length || 0)) : 0}
+                />
             </div>
         );
     }

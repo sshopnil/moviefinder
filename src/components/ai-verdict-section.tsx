@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { getMediaVerdictAction } from "@/app/actions";
-import { BrainLoader } from "@/components/brain-loader";
+import { AIVerdictSkeleton } from "@/components/ai-result-skeletons";
 import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
 import { ExpandableText } from "@/components/ui/expandable-text";
 import { Heart, Quote, Sparkles, User, Zap } from "lucide-react";
@@ -67,11 +67,7 @@ export function AIVerdictSection({ mediaType, id, title, releaseDate }: AIVerdic
     }
 
     if (loading) {
-        return (
-            <div className="relative min-h-[280px] overflow-hidden rounded-xl border border-indigo-500/20 bg-indigo-950/10">
-                <BrainLoader variant="section" message="BUILDING AI VERDICT" />
-            </div>
-        );
+        return <AIVerdictSkeleton />;
     }
 
     if (!insights) {
