@@ -9,6 +9,7 @@ declare module "next-auth" {
 }
 
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import connectToDatabase from "@/lib/db";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
@@ -32,30 +33,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         },
     },
     providers: [
-        {
-            id: "google",
-            name: "Google",
-            type: "oauth",
+        Google({
             clientId: googleClientId,
             clientSecret: googleClientSecret,
             authorization: {
-                url: "https://accounts.google.com/o/oauth2/v2/auth",
                 params: {
-                    scope: "openid email profile",
                     prompt: "select_account",
                 },
             },
-            token: "https://oauth2.googleapis.com/token",
-            userinfo: "https://openidconnect.googleapis.com/v1/userinfo",
-            profile(profile) {
-                return {
-                    id: profile.sub,
-                    name: profile.name,
-                    email: profile.email,
-                    image: profile.picture,
-                };
-            },
-        },
+        }),
         Credentials({
             credentials: {
                 email: { label: "Email", type: "email" },
