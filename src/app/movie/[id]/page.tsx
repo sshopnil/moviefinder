@@ -12,7 +12,7 @@ import { MediaGalleryLoader } from "@/components/media-gallery-loader";
 import { MediaGallerySkeleton } from "@/components/media-gallery-skeleton";
 import { MovieReviews } from "@/components/movie-reviews";
 import { SimilarMedia } from "@/components/similar-media";
-import { BrainLoader } from "@/components/brain-loader";
+import { AIRecommendationSectionSkeleton, MediaCardGridSkeleton, ReviewsSectionSkeleton } from "@/components/ai-result-skeletons";
 import { WatchProviders } from "@/components/watch-providers";
 import { SourceRecommendations } from "@/components/source-recommendations";
 
@@ -182,19 +182,19 @@ export default async function MoviePage({ params }: Props) {
                             </div>
                         </div>
                         <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[300px]">
-                            <Suspense fallback={<BrainLoader variant="section" />}>
+                            <Suspense fallback={<ReviewsSectionSkeleton />}>
                                 <MovieReviews id={movie.id} title={movie.title} releaseDate={movie.release_date} />
                             </Suspense>
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[400px]">
-                            <Suspense fallback={<BrainLoader variant="section" message="LOADING SOURCE PICKS" />}>
+                            <Suspense fallback={<MediaCardGridSkeleton />}>
                                 <SourceRecommendations tmdbId={movie.id} type="movie" />
                             </Suspense>
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[400px]">
-                            <Suspense fallback={<BrainLoader variant="section" />}>
+                            <Suspense fallback={<AIRecommendationSectionSkeleton />}>
                                 <SimilarMedia
                                     title={movie.title}
                                     overview={movie.overview}

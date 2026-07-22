@@ -2,6 +2,7 @@
 
 import { Trophy, TrendingUp, Users, Quote, Star } from "lucide-react";
 import { motion } from "framer-motion";
+import { SeasonRankingItemSkeleton } from "@/components/ai-result-skeletons";
 
 interface Ranking {
     season_number: number;
@@ -16,10 +17,11 @@ interface Ranking {
 interface SeasonRankingProps {
     rankings: Ranking[];
     seasons: any[];
+    pendingCount?: number;
 }
 
-export function SeasonRanking({ rankings, seasons }: SeasonRankingProps) {
-    if (!rankings || rankings.length === 0) return null;
+export function SeasonRanking({ rankings, seasons, pendingCount = 0 }: SeasonRankingProps) {
+    if ((!rankings || rankings.length === 0) && pendingCount === 0) return null;
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -112,6 +114,9 @@ export function SeasonRanking({ rankings, seasons }: SeasonRankingProps) {
                         </div>
                     );
                 })}
+                {Array.from({ length: pendingCount }, (_, item) => (
+                    <SeasonRankingItemSkeleton key={`pending-${item}`} />
+                ))}
             </div>
         </div>
     );

@@ -10,7 +10,7 @@ import { getWatchlistStatusAction } from "@/actions/watchlist";
 import { Suspense } from "react";
 import { TVReviews } from "@/components/tv-reviews";
 import { SimilarMedia } from "@/components/similar-media";
-import { BrainLoader } from "@/components/brain-loader";
+import { AIRecommendationSectionSkeleton, MediaCardGridSkeleton, ReviewsSectionSkeleton } from "@/components/ai-result-skeletons";
 import { WatchProviders } from "@/components/watch-providers";
 import { SourceRecommendations } from "@/components/source-recommendations";
 import { SeasonRankingSection } from "@/components/season-ranking-section";
@@ -219,21 +219,21 @@ export default async function TVPage({ params, searchParams }: Props) {
 
                         {/* TV Reviews (AI Verdict & Reception) */}
                         <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[300px]">
-                            <Suspense fallback={<BrainLoader variant="section" />}>
+                            <Suspense fallback={<ReviewsSectionSkeleton />}>
                                 <TVReviews id={tv.id} title={tv.name} firstAirDate={tv.first_air_date} />
                             </Suspense>
                         </div>
 
                         {/* Similar Series (TMDB Source Recommendations) */}
                         <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[400px]">
-                            <Suspense fallback={<BrainLoader variant="section" message="LOADING SOURCE PICKS" />}>
+                            <Suspense fallback={<MediaCardGridSkeleton />}>
                                 <SourceRecommendations tmdbId={tv.id} type="tv" />
                             </Suspense>
                         </div>
 
                         {/* Similar Series (Live AI Recommendations) */}
                         <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[400px]">
-                            <Suspense fallback={<BrainLoader variant="section" />}>
+                            <Suspense fallback={<AIRecommendationSectionSkeleton />}>
                                 <SimilarMedia
                                     title={tv.name}
                                     overview={tv.overview}

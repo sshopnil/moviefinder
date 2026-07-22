@@ -82,6 +82,7 @@ export interface AIRecommendation {
     ending_mood: string;
     emotional_impact: string;
     critics_consensus: string;
+    source?: "ai" | "fallback";
 }
 
 export interface MovieInsights {

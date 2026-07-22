@@ -63,13 +63,14 @@ export function SearchFilters() {
             } else {
                 params.delete(name);
             }
+            params.delete("page");
             return params.toString();
         },
         [searchParams]
     );
 
     const updateFilter = (name: string, value: string) => {
-        router.push("/?" + createQueryString(name, value), { scroll: false });
+        router.replace("/?" + createQueryString(name, value), { scroll: false });
     };
 
     const currentGenre = searchParams.get("with_genres") || "";
@@ -188,7 +189,7 @@ export function SearchFilters() {
                     {/* Clear */}
                     <div className="flex items-end">
                         <button
-                            onClick={() => router.push("/")}
+                            onClick={() => router.replace("/")}
                             className="w-full flex items-center justify-center gap-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors py-2 rounded-md border border-transparent hover:border-red-500/20"
                         >
                             <X className="h-4 w-4" />

@@ -1,180 +1,222 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { movieService, tvService } from "@/lib/tmdb";
-import { getMoodRecommendationsAction, searchMoviesAction, searchMultiAction } from "@/app/actions";
+import { useEffect, useSyncExternalStore } from "react";
+import { ChevronLeft, ChevronRight, RefreshCw, Sparkles } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { MovieGrid } from "@/components/movie-grid";
-import { Movie, TVSeries } from "@/types/movie";
-import { BrainLoader } from "./brain-loader";
 import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
+import { AIRecommendation, Movie, TVSeries } from "@/types/movie";
 
 interface AISearchResultsProps {
     mood: string;
     type?: string;
     with_genres?: string;
+    page?: number;
 }
 
-// Helper to hydrate TMDB data on the client (or server via action)
-// Since we are now in client component, we need to use the server action for searching or client side fetch if exposed.
-// actions.ts has searchMoviesAction. We can use that.
+type ResultItem = (Movie | TVSeries) & { aiMeta?: AIRecommendation };
+type StreamState = {
+    items: ResultItem[];
+    status: "streaming" | "done" | "error";
+    error?: string;
+};
 
-export function AISearchResults({ mood, type, with_genres }: AISearchResultsProps) {
-    const [processedItems, setProcessedItems] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [loadingText, setLoadingText] = useState("BRAIN IS BRAINING");
+const resultCache = new Map<string, StreamState>();
+const streamRequests = new Set<string>();
+const streamListeners = new Map<string, Set<() => void>>();
 
-    useEffect(() => {
-        if (!mood) return;
+function getStreamState(key: string) {
+    let state = resultCache.get(key);
+    if (!state) {
+        state = { items: [], status: "streaming" };
+        resultCache.set(key, state);
+    }
+    return state;
+}
 
-        let mounted = true;
-        let timer: NodeJS.Timeout;
+function updateStreamState(key: string, update: (state: StreamState) => StreamState) {
+    resultCache.set(key, update(getStreamState(key)));
+    streamListeners.get(key)?.forEach((listener) => listener());
+}
 
-        async function fetchAndProcess() {
-            setLoading(true);
-            setError(null);
-            setLoadingText("BRAIN IS BRAINING");
+function subscribeToStream(key: string, listener: () => void) {
+    const listeners = streamListeners.get(key) || new Set();
+    listeners.add(listener);
+    streamListeners.set(key, listeners);
 
-            timer = setTimeout(() => {
-                if (mounted) setLoadingText("USING SEMANTIC SEARCH");
-            }, 5000);
+    return () => {
+        listeners.delete(listener);
+    };
+}
 
-            try {
-                // 1. Get AI Recommendations (Raw)
-                const response = await getMoodRecommendationsAction(mood);
-                const recommendations = response.data;
+function getPreviouslyShownTitles(mood: string, page: number) {
+    const titles: string[] = [];
 
-                if (!mounted) return;
+    resultCache.forEach((state, key) => {
+        try {
+            const cachedQuery = JSON.parse(key) as AISearchResultsProps;
+            if (cachedQuery.mood !== mood || (cachedQuery.page || 1) >= page) return;
 
-                if (response.rateLimit) {
-                    showAIRateLimitToast(response.rateLimit);
-                    setProcessedItems([]);
-                    setError("AI request limit reached.");
-                    return;
-                }
+            state.items.forEach((item) => {
+                titles.push("name" in item ? item.name : item.title);
+            });
+        } catch {
+            // Ignore unrelated cache entries.
+        }
+    });
 
-                if (!recommendations || recommendations.length === 0) {
-                    setProcessedItems([]);
-                    return;
-                }
+    return Array.from(new Set(titles));
+}
 
-                // 2. Hydrate with TMDB Data
-                // We need to call search for each item. 
-                // Since this is client side, calling server actions in a loop is okay but might be slow.
-                // Better to simple loop.
+async function readRecommendationStream(key: string, body: AISearchResultsProps & { excludeTitles?: string[]; refresh?: boolean }) {
+    const response = await fetch("/api/ai/recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+    });
 
-                const hydratedResults = await Promise.all(
-                    recommendations.map(async (rec: any) => {
-                        try {
-                            // IMPROVEMENT: If the item is from fallback, it's already a full TMDB object.
-                            // We can check if it has an ID and a known source, or just check fields.
-                            // Fallback items have aiMeta.source === 'fallback' and usually have poster_path/id already.
+    if (!response.ok || !response.body) throw new Error("Failed to start recommendation stream.");
 
-                            if (rec.aiMeta?.source === 'fallback' && rec.id) {
-                                return rec;
-                            }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-                            // Otherwise, it's a raw AI suggestion (Title + Type only), so we search.
+    while (true) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-                            let mediaData: any = null;
-                            // Using server actions to avoid exposing API key on client if movieService uses it directly?
-                            // movieService in lib/tmdb usually runs on server. 
-                            // But here we imported it directly? No, we imported searchMoviesAction.
-                            // Actually existing imports were: import { movieService, tvService } from "@/lib/tmdb";
-                            // If we use movieService directly in "use client", it will fail if it uses process.env without NEXT_PUBLIC.
-                            // So safest is to use server actions.
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            const event = JSON.parse(line);
 
-                            if (rec.type === "movie") {
-                                // We need an action for searchMovies. imported searchMoviesAction.
-                                const matches = await searchMoviesAction(rec.title);
-                                mediaData = matches[0] ? { ...matches[0], media_type: "movie" } : null;
-                            } else {
-                                // We need an action for searchTV. Actions.ts usually has it? 
-                                // Let's check imports. We have no searchTVAction exposed in actions.ts based on previous view.
-                                // But we have searchMultiAction.
-                                const matches = await searchMultiAction(rec.title);
-                                // Try to find a TV match in multi search
-                                const tvMatch = matches.tv.find((t: any) => t.name.toLowerCase().includes(rec.title.toLowerCase())) || matches.tv[0];
-                                mediaData = tvMatch ? { ...tvMatch, media_type: "tv" } : null;
-                            }
-
-                            if (mediaData) {
-                                return {
-                                    ...mediaData,
-                                    aiMeta: rec
-                                };
-                            }
-                        } catch (e) {
-                            console.error(`Failed to hydrate ${rec.title}`, e);
-                        }
-                        return null;
-                    })
-                );
-
-                if (!mounted) return;
-
-                const items = hydratedResults.filter(Boolean);
-
-                // Deduplicate
-                const seen = new Set();
-                const uniqueItems = items.filter((item: any) => {
-                    const key = `${item.media_type}-${item.id}`;
-                    if (seen.has(key)) return false;
-                    seen.add(key);
-                    return item.poster_path; // Filter out items without posters
-                });
-
-                // Filter by type/genre if needed
-                let finalItems = uniqueItems;
-                if (type) {
-                    finalItems = finalItems.filter((i: any) => i.media_type === type);
-                }
-
-                if (with_genres) {
-                    const genreId = parseInt(with_genres);
-                    finalItems = finalItems.filter((i: any) => i.genre_ids?.includes(genreId));
-                }
-
-                setProcessedItems(finalItems);
-
-            } catch (err) {
-                console.error("AI Search Process failed", err);
-                if (mounted) setError("Failed to get recommendations.");
-            } finally {
-                if (mounted) setLoading(false);
-                clearTimeout(timer);
+            if (event.type === "item") {
+                updateStreamState(key, (state) => ({ ...state, items: [...state.items, event.item] }));
+            } else if (event.type === "rateLimit") {
+                showAIRateLimitToast(event.rateLimit);
+                updateStreamState(key, (state) => ({
+                    ...state,
+                    error: "AI request limit reached. Please try again shortly.",
+                }));
+            } else if (event.type === "error") {
+                updateStreamState(key, (state) => ({ ...state, error: event.message }));
             }
         }
 
-        fetchAndProcess();
-
-        return () => {
-            mounted = false;
-            clearTimeout(timer);
-        };
-    }, [mood, type, with_genres]);
-
-    if (!mood) return null;
-
-    if (loading) {
-        return <BrainLoader variant="section" message={loadingText} />;
+        if (done) break;
     }
 
-    if (error) {
-        return (
-            <div className="text-center py-20 text-red-400">
-                {error} Please try again.
+    updateStreamState(key, (state) => ({ ...state, status: state.error ? "error" : "done" }));
+}
+
+function ensureRecommendationStream(key: string, body: AISearchResultsProps, refresh = false) {
+    if (streamRequests.has(key) || getStreamState(key).status !== "streaming") return;
+    streamRequests.add(key);
+
+    void readRecommendationStream(key, {
+        ...body,
+        excludeTitles: getPreviouslyShownTitles(body.mood, body.page || 1),
+        refresh,
+    }).catch((error) => {
+        console.error("AI Search Process failed", error);
+        updateStreamState(key, (state) => ({
+            ...state,
+            error: "Failed to get recommendations. Please try again.",
+            status: "error",
+        }));
+    }).finally(() => {
+        streamRequests.delete(key);
+    });
+}
+
+export function AISearchResults({ mood, type, with_genres, page = 1 }: AISearchResultsProps) {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const cacheKey = JSON.stringify({ mood, type, with_genres, page });
+    const state = useSyncExternalStore(
+        (listener) => subscribeToStream(cacheKey, listener),
+        () => getStreamState(cacheKey),
+        () => getStreamState(cacheKey),
+    );
+
+    useEffect(() => {
+        ensureRecommendationStream(cacheKey, { mood, type, with_genres, page });
+    }, [cacheKey, mood, page, type, with_genres]);
+
+    const navigateToPage = (nextPage: number) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (nextPage === 1) params.delete("page");
+        else params.set("page", nextPage.toString());
+        router.push(`/?${params.toString()}`, { scroll: false });
+    };
+
+    const regeneratePage = () => {
+        streamRequests.delete(cacheKey);
+        updateStreamState(cacheKey, () => ({ items: [], status: "streaming" }));
+        ensureRecommendationStream(cacheKey, { mood, type, with_genres, page }, true);
+    };
+
+    return (
+        <section aria-live="polite" aria-busy={state.status === "streaming"}>
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-2xl font-semibold text-white/90">
+                    AI Recommendations for &quot;{mood}&quot; <span className="text-base font-normal text-gray-500">Page {page}</span>
+                </h2>
+                {state.status === "streaming" && <span className="text-sm text-purple-300">Results appear as they are found</span>}
             </div>
-        );
-    }
 
-    if (processedItems.length === 0) {
-        return (
-            <div className="text-center py-20 text-gray-500">
-                No results found for your mood. Try describing it differently.
-            </div>
-        );
-    }
+            {(state.items.length > 0 || state.status === "streaming") && (
+                <MovieGrid
+                    movies={state.items}
+                    title=""
+                    pendingCount={state.status === "streaming" ? Math.max(0, 6 - state.items.length) : 0}
+                />
+            )}
 
-    return <MovieGrid movies={processedItems} title={`AI Recommendations for "${mood}"`} />;
+            {state.status === "error" && state.items.length === 0 && (
+                <div className="py-20 text-center text-red-400">{state.error}</div>
+            )}
+
+            {state.status === "done" && state.items.length === 0 && (
+                <div className="flex items-center justify-center gap-2 py-20 text-gray-500">
+                    <Sparkles className="h-4 w-4" />
+                    No results found for your mood. Try describing it differently.
+                </div>
+            )}
+
+            {(state.items.length >= 6 || (state.status !== "streaming" && state.items.length > 0)) && (
+                <nav className="mt-10 flex items-center justify-center gap-4 border-t border-white/10 pt-6" aria-label="AI recommendation pages">
+                    <button
+                        type="button"
+                        onClick={() => navigateToPage(page - 1)}
+                        disabled={page === 1}
+                        className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                    </button>
+                    <span className="text-sm text-gray-400">Page <span className="font-semibold text-white">{page}</span></span>
+                    {state.status !== "streaming" && (
+                        <button
+                            type="button"
+                            onClick={regeneratePage}
+                            className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                            Regenerate
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => navigateToPage(page + 1)}
+                        className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-gray-200"
+                    >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
+                </nav>
+            )}
+        </section>
+    );
 }

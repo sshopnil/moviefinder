@@ -5,7 +5,6 @@ import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { Star, PlayCircle, Users, Sparkles, Heart, Info, Quote } from "lucide-react";
 import Image from "@/components/ui/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
 
 interface AIRecommendationCardProps {
     movie: (Movie | TVSeries) & { aiMeta?: AIRecommendation };
@@ -19,6 +18,7 @@ export function AIRecommendationCard({ movie }: AIRecommendationCardProps) {
     const meta = movie.aiMeta;
 
     if (!meta) return null;
+    const isFallback = meta.source === "fallback";
 
     return (
         <div className="group relative bg-white/5 border border-white/10 rounded-2xl overflow-hidden hover:bg-white/10 transition-all duration-300 flex flex-col h-full shadow-2xl">
@@ -34,8 +34,8 @@ export function AIRecommendationCard({ movie }: AIRecommendationCardProps) {
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
 
                 {/* Score Badge */}
-                <div className="absolute top-3 right-3 px-2 py-1 bg-blue-600/90 text-white text-[10px] font-bold rounded-md backdrop-blur-sm border border-white/20">
-                    {meta.relevance_score}% Match
+                <div className={`absolute top-3 right-3 px-2 py-1 text-white text-[10px] font-bold rounded-md backdrop-blur-sm border border-white/20 ${isFallback ? "bg-amber-600/90" : "bg-blue-600/90"}`}>
+                    {isFallback ? "Semantic match" : `${meta.relevance_score}% Match`}
                 </div>
 
                 <div className="absolute bottom-3 left-3 right-3">
@@ -62,23 +62,21 @@ export function AIRecommendationCard({ movie }: AIRecommendationCardProps) {
                 <div className="space-y-1">
                     <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 uppercase tracking-wider">
                         <Sparkles className="h-3 w-3" />
-                        Why it matches your mood
+                        {isFallback ? "Related through TMDB themes" : "Why it matches your mood"}
                     </div>
-                    {movie.aiMeta?.reason ? (
+                    {!isFallback && movie.aiMeta?.reason ? (
                         <p className="text-sm text-gray-300 italic leading-relaxed">
-                            "{movie.aiMeta.reason}"
+                            &quot;{movie.aiMeta.reason}&quot;
                         </p>
                     ) : (
-                        <div className="mb-3">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
-                                Semantic Result
-                            </span>
-                        </div>
+                        <p className="text-sm leading-relaxed text-gray-400">
+                            Matched from TMDB keywords and related title signals, not generated AI analysis.
+                        </p>
                     )}
                 </div>
 
                 {/* Content Switch: AI Details vs Standard Overview */}
-                {movie.aiMeta?.target_audience ? (
+                {!isFallback && movie.aiMeta?.target_audience ? (
                     <>
                         {/* For Whom / Feeling Grid */}
                         <div className="grid grid-cols-2 gap-3">
@@ -120,12 +118,12 @@ export function AIRecommendationCard({ movie }: AIRecommendationCardProps) {
                                 Critics Consensus
                             </div>
                             <p className="text-xs text-gray-400 italic">
-                                "{movie.aiMeta.critics_consensus}"
+                                &quot;{movie.aiMeta.critics_consensus}&quot;
                             </p>
                         </div>
                     </>
                 ) : (
-                    /* Fallback: Show Standard Overview */
+                            /* Semantic fallback: only show factual TMDB content. */
                     <div className="mt-2 space-y-3">
                         <div className="bg-white/5 rounded-lg p-3 border border-white/5">
                             <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">

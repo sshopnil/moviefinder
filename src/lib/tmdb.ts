@@ -220,6 +220,7 @@ export const tvService = {
 
     getDiscover: async (filters: {
         with_genres?: string;
+        with_keywords?: string;
         first_air_date_year?: string;
         "vote_average.gte"?: string;
         with_original_language?: string;

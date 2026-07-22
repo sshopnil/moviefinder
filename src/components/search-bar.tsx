@@ -8,7 +8,7 @@ import { Movie, TVSeries } from "@/types/movie";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import Image from "@/components/ui/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 interface SearchBarProps {
     onSearch: (query: string) => void;
@@ -17,13 +17,18 @@ interface SearchBarProps {
 }
 
 export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps) {
-    const [query, setQuery] = useState("");
+    const searchParams = useSearchParams();
+    const [query, setQuery] = useState(() => searchParams.get("q") || "");
     const [suggestions, setSuggestions] = useState<(Movie | TVSeries)[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
-    const router = useRouter();
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        setQuery(searchParams.get("q") || "");
+        setShowSuggestions(false);
+    }, [searchParams]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -33,7 +38,7 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
 
     useEffect(() => {
         const fetchSuggestions = async () => {
-            if (query.trim().length < 1) {
+            if (!showSuggestions || query.trim().length < 1) {
                 setSuggestions([]);
                 return;
             }
@@ -52,7 +57,7 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
 
         const timer = setTimeout(fetchSuggestions, 300);
         return () => clearTimeout(timer);
-    }, [query]);
+    }, [query, showSuggestions]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {

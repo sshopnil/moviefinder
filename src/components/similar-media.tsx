@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { getSimilarContentAction } from "@/app/actions";
 import { Sparkles, Star, Quote, Heart, PlayCircle, Users, Info } from "lucide-react";
 import Link from "next/link";
 import Image from "./ui/image";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
-import { BrainLoader } from "./brain-loader";
 import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
+import { AIRecommendationCardSkeleton } from "@/components/ai-result-skeletons";
 
 interface SimilarMediaProps {
     title: string;
@@ -45,43 +44,58 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
     const [hasRun, setHasRun] = useState(false);
     const [isFallback, setIsFallback] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [loadingText, setLoadingText] = useState("BRAIN IS BRAINING");
 
     async function fetchSimilar() {
         setHasRun(true);
         setLoading(true);
         setError(null);
         setIsFallback(false);
-        setLoadingText("BRAIN IS BRAINING");
-
-        // Set a timer to change text if it takes too long (e.g., waiting for AI which might timeout)
-        const timer = setTimeout(() => {
-            setLoadingText("USING SEMANTIC SEARCH");
-        }, 5000); // 5 seconds delay
+        setRecommendations([]);
 
         try {
-            const response = await getSimilarContentAction(title, overview, genres, type, tmdbId);
-            const results = response.data;
+            const response = await fetch("/api/ai/recommendations", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: "similar", title, overview, genres, sourceType: type, tmdbId }),
+            });
 
-            if (response.rateLimit) {
-                showAIRateLimitToast(response.rateLimit);
-                setRecommendations([]);
-                setError("AI recommendation limit reached. Try again in a moment.");
-                return;
+            if (!response.ok || !response.body) throw new Error("Failed to start recommendation stream.");
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let resultCount = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                buffer += decoder.decode(value, { stream: !done });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    const event = JSON.parse(line);
+
+                    if (event.type === "item") {
+                        resultCount++;
+                        setRecommendations((current) => current.some((item) => item.id === event.item.id)
+                            ? current
+                            : [...current, event.item]);
+                        if (event.item.aiMeta?.source === "fallback") {
+                            setIsFallback(true);
+                        }
+                    } else if (event.type === "rateLimit") {
+                        showAIRateLimitToast(event.rateLimit);
+                        setError("AI recommendation limit reached. Try again in a moment.");
+                    } else if (event.type === "error") {
+                        setError(event.message);
+                    }
+                }
+
+                if (done) break;
             }
 
-            // Deduplicate results based on ID
-            const uniqueResults = results.filter((item, index, self) =>
-                index === self.findIndex((t) => t.id === item.id)
-            );
-            setRecommendations(uniqueResults);
-
-            // Check source of first item to determine if fallback
-            if (uniqueResults.length > 0 && uniqueResults[0].aiMeta?.source === 'fallback') {
-                setIsFallback(true);
-            }
-
-            if (uniqueResults.length === 0) {
+            if (resultCount === 0) {
                 setError("No recommendations were found. Try again in a moment.");
             }
         } catch (error) {
@@ -89,7 +103,6 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
             setRecommendations([]);
             setError("AI recommendations failed. Try again in a moment.");
         } finally {
-            clearTimeout(timer);
             setLoading(false);
         }
     }
@@ -147,11 +160,7 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                 )}
             </div>
 
-            {loading ? (
-                <div className="relative min-h-[320px] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-                    <BrainLoader variant="section" message={loadingText} />
-                </div>
-            ) : recommendations.length === 0 ? (
+            {!loading && recommendations.length === 0 ? (
                 renderEmptyState()
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -160,6 +169,7 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                         const score = rawScore <= 1 ? Math.round(rawScore * 100) : Math.round(rawScore);
                         const itemTitle = item.title || item.name || "Recommended title";
                         const itemPath = item.media_type === "tv" ? "tv" : "movie";
+                        const isSemanticFallback = item.aiMeta?.source === "fallback";
 
                         return (
                             <Link
@@ -182,9 +192,9 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                                         {/* Match Badge */}
                                         <div className="absolute top-3 right-3 flex flex-col gap-1 items-end">
                                             <div className="bg-blue-600 font-bold text-white text-[10px] px-2 py-1 rounded-md shadow-lg border border-blue-400/50">
-                                                {score}% Match
+                                                {isSemanticFallback ? "Semantic match" : `${score}% Match`}
                                             </div>
-                                            {item.aiMeta?.source === 'fallback' && (
+                                            {isSemanticFallback && (
                                                 <div className="bg-yellow-500/90 font-bold text-white text-[9px] px-2 py-0.5 rounded-md shadow-lg border border-yellow-400/50 uppercase tracking-wider">
                                                     Semantic
                                                 </div>
@@ -215,21 +225,19 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                                         <div className="space-y-1">
                                             <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 uppercase tracking-wider">
                                                 <Sparkles className="h-3 w-3" />
-                                                Why it matches your mood
-                                            </div>
-                                            {item.aiMeta?.reason ? (
+                                                 {isSemanticFallback ? "Related through TMDB themes" : "Why it matches your mood"}
+                                             </div>
+                                            {!isSemanticFallback && item.aiMeta?.reason ? (
                                                 <p className="text-sm text-gray-300 italic leading-relaxed">&quot;{item.aiMeta.reason}&quot;</p>
                                             ) : (
-                                                <div className="mb-3">
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
-                                                        Semantic Result
-                                                    </span>
-                                                </div>
+                                                <p className="text-sm leading-relaxed text-gray-400">
+                                                    Matched from TMDB keywords and related title signals, not generated AI analysis.
+                                                </p>
                                             )}
                                         </div>
 
                                         {/* Content Switch: AI Details vs Standard Overview */}
-                                        {item.aiMeta?.target_audience ? (
+                                        {!isSemanticFallback && item.aiMeta?.target_audience ? (
                                             <>
                                                 {/* For Whom / Feeling Grid */}
                                                 <div className="grid grid-cols-2 gap-3">
@@ -303,6 +311,9 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                             </Link>
                         )
                     })}
+                    {loading && Array.from({ length: Math.max(0, 6 - recommendations.length) }, (_, item) => (
+                        <AIRecommendationCardSkeleton key={`pending-${item}`} />
+                    ))}
                 </div>
             )}
         </div>

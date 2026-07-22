@@ -2,36 +2,31 @@
 
 import { SearchBar } from "@/components/search-bar";
 import { MoodSelector } from "@/components/mood-selector";
-import { BrainLoader } from "@/components/brain-loader";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useTransition } from "react";
 
 export function ClientHeader() {
     const router = useRouter();
-    const [isLoading, setIsLoading] = useState(false);
-    const [searchLoading, setSearchLoading] = useState(false);
+    const [isPending, startTransition] = useTransition();
 
     const handleSearch = (query: string) => {
         if (!query.trim()) return;
-        setSearchLoading(true);
-        router.push(`/?q=${encodeURIComponent(query)}`);
-        // Reset loading state after navigation completes usually happens automatically by Next.js if we used useTransition 
-        // but here we just show it briefly.
-        setTimeout(() => setSearchLoading(false), 2000);
+        startTransition(() => {
+            router.push(`/?q=${encodeURIComponent(query.trim())}`);
+        });
     };
 
     const handleMoodSubmit = (mood: string) => {
         if (!mood.trim()) return;
-        setIsLoading(true);
-        router.push(`/?mood=${encodeURIComponent(mood)}`);
-        setTimeout(() => setIsLoading(false), 2000);
+        startTransition(() => {
+            router.push(`/?mood=${encodeURIComponent(mood.trim())}`);
+        });
     };
 
     return (
         <>
-            <SearchBar onSearch={handleSearch} searchLoading={searchLoading} />
-            <MoodSelector onMoodSubmit={handleMoodSubmit} isLoading={isLoading} />
-            {isLoading && <BrainLoader />}
+            <SearchBar onSearch={handleSearch} searchLoading={isPending} />
+            <MoodSelector onMoodSubmit={handleMoodSubmit} isLoading={isPending} />
         </>
     );
 }
