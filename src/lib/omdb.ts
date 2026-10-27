@@ -1,4 +1,3 @@
-
 export interface ExternalRatings {
     imdb?: string;
     rottenTomatoes?: string;
@@ -6,10 +5,24 @@ export interface ExternalRatings {
     awards?: string;
 }
 
+let omdbCooldownUntil = 0;
+
+export function resetOmdbCooldown() {
+    omdbCooldownUntil = 0;
+}
+
+export function isOmdbInCooldown(): boolean {
+    return Date.now() < omdbCooldownUntil;
+}
+
 export async function getExternalRatings(title: string, year?: string): Promise<ExternalRatings | null> {
     const apiKey = process.env.OMDB_API_KEY;
     if (!apiKey) {
         console.warn("OMDB_API_KEY is missing. Cannot fetch external ratings.");
+        return null;
+    }
+
+    if (Date.now() < omdbCooldownUntil) {
         return null;
     }
 
@@ -23,6 +36,10 @@ export async function getExternalRatings(title: string, year?: string): Promise<
         const data = await res.json();
 
         if (data.Response === "False") {
+            if (typeof data.Error === "string" && data.Error.toLowerCase().includes("request limit")) {
+                console.warn("[OMDb] Daily request limit reached. Cooling down for 15 minutes.");
+                omdbCooldownUntil = Date.now() + 15 * 60 * 1000;
+            }
             return null;
         }
 

@@ -1,10 +1,17 @@
-import { getSemanticMoodRecommendations, streamRecommendationsFromMood, streamSeasonRanking, streamSimilarContent, isAIRateLimitError } from "@/lib/ai";
+import { getSemanticMoodRecommendations, streamRecommendationsFromMood, streamSeasonRanking, streamSimilarContent, isAIRateLimitError, getAIRateLimitInfo } from "@/lib/ai";
+import { matchesGenreFilter, getGenreIdForDiscover } from "@/lib/genres";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { validateRequestOrigin } from "@/lib/security";
 import { movieService, tvService } from "@/lib/tmdb";
 import { Movie, Season, TVSeries } from "@/types/movie";
 
 export const runtime = "nodejs";
+
+export async function GET() {
+    return Response.json({
+        rateLimit: getAIRateLimitInfo(),
+    });
+}
 
 type RequestBody = {
     mode?: "mood" | "similar" | "season-ranking";
@@ -59,7 +66,19 @@ export async function POST(request: Request) {
         );
     }
 
-    const body = await request.json() as RequestBody;
+    let body: RequestBody;
+    try {
+        body = (await request.json()) as RequestBody;
+    } catch {
+        if (request.signal.aborted) {
+            return new Response(null, { status: 499 });
+        }
+        return Response.json({ error: "Invalid or empty JSON body." }, { status: 400 });
+    }
+
+    if (!body || typeof body !== "object") {
+        return Response.json({ error: "Request body must be a JSON object." }, { status: 400 });
+    }
     const mood = body.mood?.trim().slice(0, 250);
     const title = body.title?.trim().slice(0, 200);
     const overview = (body.overview || "").slice(0, 1500);
@@ -119,12 +138,26 @@ export async function POST(request: Request) {
                     try {
                         let media;
 
-                        if (recommendation.aiMeta?.source === "fallback" && recommendation.id) {
+                        if ((recommendation.aiMeta?.source === "fallback" || recommendation.aiMeta?.source === "rate_limited") && recommendation.id) {
                             usedFallback = true;
                             media = recommendation;
                         } else {
-                            const matches = await movieService.searchMulti(recommendation.title);
-                            const match = selectExactTitle([...matches.movies, ...matches.tv], recommendation.title);
+                            const matches = await movieService.searchMulti(recommendation.title, 1, request.signal);
+                            const preferredType = body.type || (recommendation.type === "tv" ? "tv" : recommendation.type === "movie" ? "movie" : undefined);
+                            let match: Movie | TVSeries | null | undefined = null;
+                            if (preferredType === "tv") {
+                                match = selectExactTitle(matches.tv, recommendation.title) || selectExactTitle(matches.movies, recommendation.title);
+                            } else if (preferredType === "movie") {
+                                match = selectExactTitle(matches.movies, recommendation.title) || selectExactTitle(matches.tv, recommendation.title);
+                            } else {
+                                const movieMatch = selectExactTitle(matches.movies, recommendation.title);
+                                const tvMatch = selectExactTitle(matches.tv, recommendation.title);
+                                if (movieMatch && tvMatch) {
+                                    match = (tvMatch.popularity || 0) > (movieMatch.popularity || 0) ? tvMatch : movieMatch;
+                                } else {
+                                    match = movieMatch || tvMatch;
+                                }
+                            }
                             media = match
                                 ? { ...match, media_type: "name" in match ? "tv" as const : "movie" as const }
                                 : null;
@@ -132,12 +165,16 @@ export async function POST(request: Request) {
 
                         if (!media?.poster_path) continue;
                         if (body.type && media.media_type !== body.type) continue;
-                        if (body.with_genres && !media.genre_ids?.includes(Number(body.with_genres))) continue;
+                        if (body.with_genres && !matchesGenreFilter(media.genre_ids, body.with_genres, media.media_type)) continue;
 
                         const key = `${media.media_type}-${media.id}`;
                         if (seen.has(key)) continue;
                         seen.add(key);
                         const { aiMeta: recommendationMeta, ...recommendationData } = recommendation;
+                        const isFallbackItem = recommendationMeta?.source === "fallback" || recommendationMeta?.source === "rate_limited";
+                        if (isFallbackItem) {
+                            usedFallback = true;
+                        }
                         send({
                             type: "item",
                             item: {
@@ -145,6 +182,7 @@ export async function POST(request: Request) {
                                 aiMeta: {
                                     ...recommendationData,
                                     source: recommendationMeta?.source || "ai",
+                                    rateLimit: recommendationMeta?.rateLimit || (isFallbackItem ? getAIRateLimitInfo() : undefined),
                                 },
                             },
                         });
@@ -156,43 +194,37 @@ export async function POST(request: Request) {
                 }
 
                 if (seen.size === 0 && !request.signal.aborted) {
+                    usedFallback = true;
                     let fallbackItems: (Movie | TVSeries)[] = [];
 
-                    if (!usedFallback && body.mode === "similar" && body.tmdbId) {
-                        fallbackItems = body.sourceType === "movie"
-                            ? await movieService.getSimilar(body.tmdbId)
-                            : await tvService.getSimilar(body.tmdbId);
-                    } else if (!usedFallback && mood) {
-                        fallbackItems = await getSemanticMoodRecommendations(mood, body.page);
-                    } else if (body.with_genres) {
+                    if (body.with_genres) {
                         if (body.type === "movie") {
-                            fallbackItems = (await movieService.getDiscover({ with_genres: body.with_genres })).results;
+                            fallbackItems = (await movieService.getDiscover({ with_genres: getGenreIdForDiscover(body.with_genres, "movie") }, request.signal)).results;
                         } else if (body.type === "tv") {
-                            fallbackItems = (await tvService.getDiscover({ with_genres: body.with_genres })).results;
+                            fallbackItems = (await tvService.getDiscover({ with_genres: getGenreIdForDiscover(body.with_genres, "tv") }, request.signal)).results;
                         } else {
                             const [movies, tv] = await Promise.all([
-                                movieService.getDiscover({ with_genres: body.with_genres }),
-                                tvService.getDiscover({ with_genres: body.with_genres }),
+                                movieService.getDiscover({ with_genres: getGenreIdForDiscover(body.with_genres, "movie") }, request.signal),
+                                tvService.getDiscover({ with_genres: getGenreIdForDiscover(body.with_genres, "tv") }, request.signal),
                             ]);
                             fallbackItems = [...movies.results.slice(0, 5), ...tv.results.slice(0, 5)];
                         }
                     } else if (body.type === "movie") {
-                        fallbackItems = await movieService.getPopular();
+                        fallbackItems = await movieService.getPopular(request.signal);
                     } else if (body.type === "tv") {
-                        fallbackItems = await tvService.getPopular();
+                        fallbackItems = await tvService.getPopular(request.signal);
                     } else {
                         const [movies, tv] = await Promise.all([
-                            movieService.getPopular(),
-                            tvService.getPopular(),
+                            movieService.getPopular(request.signal),
+                            tvService.getPopular(request.signal),
                         ]);
                         fallbackItems = [...movies.slice(0, 5), ...tv.slice(0, 5)];
                     }
 
                     for (const media of fallbackItems) {
                         if (!media.poster_path) continue;
-                        if (body.with_genres && !media.genre_ids?.includes(Number(body.with_genres))) continue;
-
                         const mediaType = media.media_type === "tv" ? "tv" : "movie";
+                        if (body.with_genres && !matchesGenreFilter(media.genre_ids, body.with_genres, mediaType)) continue;
                         const key = `${mediaType}-${media.id}`;
                         if (seen.has(key)) continue;
                         seen.add(key);
@@ -214,12 +246,21 @@ export async function POST(request: Request) {
                                     emotional_impact: "",
                                     critics_consensus: "",
                                     source: "fallback",
+                                    rateLimit: getAIRateLimitInfo(),
                                 },
                             },
                         });
 
                         if (seen.size >= 6) break;
                     }
+                }
+
+                if (usedFallback) {
+                    send({
+                        type: "quota",
+                        rateLimit: getAIRateLimitInfo(),
+                        isSemantic: true,
+                    });
                 }
 
                 send({ type: "done" });

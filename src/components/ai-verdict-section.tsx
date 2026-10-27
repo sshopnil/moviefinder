@@ -47,10 +47,7 @@ export function AIVerdictSection({ mediaType, id, title, releaseDate, initialRat
         setError(null);
 
         try {
-            const response = await getMediaVerdictAction(mediaType, id, title, releaseDate, {
-                ratings: initialRatings,
-                reviews: initialReviews,
-            });
+            const response = await getMediaVerdictAction(mediaType, id, title, releaseDate);
 
             if (response.rateLimit) {
                 showAIRateLimitToast(response.rateLimit);

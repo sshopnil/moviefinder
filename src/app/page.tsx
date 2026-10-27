@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { logSearchAction } from "@/actions/history";
 import { Pagination } from "@/components/pagination";
 import { AISearchResults } from "@/components/ai-search-results";
+import { matchesGenreFilter, getGenreIdForDiscover } from "@/lib/genres";
 
 // Server Component
 export default async function Home(props: {
@@ -64,28 +65,32 @@ export default async function Home(props: {
 
   if (query) {
     isSearchOrFilter = true;
-    viewTitle = `Results for "${query}"`;
+    viewTitle = type === "tv" ? `TV Series for "${query}"` : type === "movie" ? `Movies for "${query}"` : `Results for "${query}"`;
     try {
-      const results = await movieService.searchMulti(query, page);
       logSearchAction(query).catch(err => console.error("Failed to log search:", err));
 
-      movies = results.movies;
-      tv = results.tv;
-      people = results.people;
-      totalPages = results.total_pages;
-
-      if (type) {
-        if (type === "movie") tv = [];
-        if (type === "tv") movies = [];
+      if (type === "movie") {
+        const results = await movieService.searchMovies(query, page);
+        movies = results.results;
+        totalPages = results.total_pages;
+      } else if (type === "tv") {
+        const results = await tvService.searchTV(query, page);
+        tv = results.results;
+        totalPages = results.total_pages;
+      } else {
+        const results = await movieService.searchMulti(query, page);
+        movies = results.movies;
+        tv = results.tv;
+        people = results.people;
+        totalPages = results.total_pages;
       }
 
       // Note: Filtering after fetching from TMDB might reduce results per page
       // but TMDB doesn't support complex filtering in search_multi.
       // For better results, if type is specified, we could use searchMovie/searchTV directly.
       if (with_genres) {
-        const genreId = parseInt(with_genres);
-        movies = movies.filter(m => m.genre_ids?.includes(genreId));
-        tv = tv.filter(s => s.genre_ids?.includes(genreId));
+        movies = movies.filter(m => matchesGenreFilter(m.genre_ids, with_genres, "movie"));
+        tv = tv.filter(s => matchesGenreFilter(s.genre_ids, with_genres, "tv"));
       }
       if (primary_release_year) {
         movies = movies.filter(m => m.release_date?.startsWith(primary_release_year));
@@ -109,7 +114,7 @@ export default async function Home(props: {
     try {
       if (!type || type === "movie") {
         const movieResults = await movieService.getDiscover({
-          with_genres,
+          with_genres: with_genres ? getGenreIdForDiscover(with_genres, "movie") : undefined,
           primary_release_year,
           "vote_average.gte": vote_average_gte,
           with_original_language,
@@ -122,7 +127,7 @@ export default async function Home(props: {
       }
       if (!type || type === "tv") {
         const tvResults = await tvService.getDiscover({
-          with_genres,
+          with_genres: with_genres ? getGenreIdForDiscover(with_genres, "tv") : undefined,
           first_air_date_year: primary_release_year,
           "vote_average.gte": vote_average_gte,
           with_original_language,

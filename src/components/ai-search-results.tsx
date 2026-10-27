@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ChevronLeft, ChevronRight, Clock, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MovieGrid } from "@/components/movie-grid";
 import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
-import { AIRecommendation, Movie, TVSeries } from "@/types/movie";
+import { AIRecommendation, AIRateLimitInfo, Movie, TVSeries } from "@/types/movie";
 
 interface AISearchResultsProps {
     mood: string;
@@ -19,6 +19,8 @@ type StreamState = {
     items: ResultItem[];
     status: "streaming" | "done" | "error";
     error?: string;
+    isSemantic?: boolean;
+    rateLimit?: AIRateLimitInfo;
 };
 
 const resultCache = new Map<string, StreamState>();
@@ -52,6 +54,9 @@ function subscribeToStream(key: string, listener: () => void) {
 
     return () => {
         listeners.delete(listener);
+        if (listeners.size === 0) {
+            streamListeners.delete(key);
+        }
     };
 }
 
@@ -59,6 +64,11 @@ function getPreviouslyShownTitles(mood: string, page: number) {
     const titles: string[] = [];
 
     resultCache.forEach((state, key) => {
+        // Never include semantic fallback titles in AI exclusion list
+        if (state.isSemantic || state.items.some((i) => i.aiMeta?.source === "fallback" || i.aiMeta?.source === "rate_limited")) {
+            return;
+        }
+
         try {
             const cachedQuery = JSON.parse(key) as AISearchResultsProps;
             if (cachedQuery.mood !== mood || (cachedQuery.page || 1) >= page) return;
@@ -95,16 +105,48 @@ async function readRecommendationStream(key: string, body: AISearchResultsProps 
         buffer = lines.pop() || "";
 
         for (const line of lines) {
-            if (!line.trim()) continue;
-            const event = JSON.parse(line);
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            let event;
+            try {
+                event = JSON.parse(trimmed);
+            } catch (err) {
+                console.warn("[AISearch] Failed to parse stream event:", trimmed, err);
+                continue;
+            }
 
-            if (event.type === "item") {
-                updateStreamState(key, (state) => ({ ...state, items: [...state.items, event.item] }));
+            if (event.type === "item" && event.item) {
+                const isItemFallback = event.item.aiMeta?.source === "fallback" || event.item.aiMeta?.source === "rate_limited";
+                const itemRateLimit = event.item.aiMeta?.rateLimit;
+                updateStreamState(key, (state) => {
+                    const itemKey = `${event.item.media_type || "movie"}-${event.item.id}`;
+                    if (state.items.some((i) => `${i.media_type || "movie"}-${i.id}` === itemKey)) {
+                        return {
+                            ...state,
+                            isSemantic: state.isSemantic || isItemFallback,
+                            rateLimit: itemRateLimit || state.rateLimit,
+                        };
+                    }
+                    return {
+                        ...state,
+                        items: [...state.items, event.item],
+                        isSemantic: state.isSemantic || isItemFallback,
+                        rateLimit: itemRateLimit || state.rateLimit,
+                    };
+                });
+            } else if (event.type === "quota") {
+                updateStreamState(key, (state) => ({
+                    ...state,
+                    isSemantic: true,
+                    rateLimit: event.rateLimit || state.rateLimit,
+                }));
             } else if (event.type === "rateLimit") {
                 showAIRateLimitToast(event.rateLimit);
                 updateStreamState(key, (state) => ({
                     ...state,
-                    error: "AI request limit reached. Please try again shortly.",
+                    isSemantic: true,
+                    rateLimit: event.rateLimit || state.rateLimit,
+                    error: "AI request limit reached. Showing instant semantic results.",
                 }));
             } else if (event.type === "error") {
                 updateStreamState(key, (state) => ({ ...state, error: event.message }));
@@ -114,11 +156,69 @@ async function readRecommendationStream(key: string, body: AISearchResultsProps 
         if (done) break;
     }
 
-    updateStreamState(key, (state) => ({ ...state, status: state.error ? "error" : "done" }));
+    if (buffer.trim()) {
+        try {
+            const event = JSON.parse(buffer.trim());
+            if (event.type === "item" && event.item) {
+                const isItemFallback = event.item.aiMeta?.source === "fallback" || event.item.aiMeta?.source === "rate_limited";
+                const itemRateLimit = event.item.aiMeta?.rateLimit;
+                updateStreamState(key, (state) => {
+                    const itemKey = `${event.item.media_type || "movie"}-${event.item.id}`;
+                    if (state.items.some((i) => `${i.media_type || "movie"}-${i.id}` === itemKey)) {
+                        return {
+                            ...state,
+                            isSemantic: state.isSemantic || isItemFallback,
+                            rateLimit: itemRateLimit || state.rateLimit,
+                        };
+                    }
+                    return {
+                        ...state,
+                        items: [...state.items, event.item],
+                        isSemantic: state.isSemantic || isItemFallback,
+                        rateLimit: itemRateLimit || state.rateLimit,
+                    };
+                });
+            } else if (event.type === "quota" || event.type === "rateLimit") {
+                updateStreamState(key, (state) => ({
+                    ...state,
+                    isSemantic: true,
+                    rateLimit: event.rateLimit || state.rateLimit,
+                }));
+            }
+        } catch {
+            // Trailing malformed buffer ignored
+        }
+    }
+
+    updateStreamState(key, (state) => {
+        const isSemantic = state.isSemantic || state.items.some((i) => i.aiMeta?.source === "fallback" || i.aiMeta?.source === "rate_limited");
+        return {
+            ...state,
+            isSemantic,
+            status: state.error && state.items.length === 0 ? "error" : "done",
+        };
+    });
 }
 
 function ensureRecommendationStream(key: string, body: AISearchResultsProps, refresh = false, signal?: AbortSignal) {
-    if (streamRequests.has(key) || getStreamState(key).status !== "streaming") return;
+    const currentState = resultCache.get(key);
+    if (streamRequests.has(key)) return;
+
+    // Semantic results must NEVER be served from cache: if previous stream was semantic, clear and re-run
+    if (!refresh && currentState && currentState.status === "done") {
+        const isSemantic = currentState.isSemantic || currentState.items.some((i) => i.aiMeta?.source === "fallback" || i.aiMeta?.source === "rate_limited");
+        if (isSemantic) {
+            resultCache.delete(key);
+        } else {
+            return;
+        }
+    } else if (currentState?.status !== "streaming" && !refresh) {
+        if (currentState?.isSemantic) {
+            resultCache.delete(key);
+        }
+    }
+
+    if (getStreamState(key).status !== "streaming") return;
     streamRequests.add(key);
 
     void readRecommendationStream(key, {
@@ -127,6 +227,12 @@ function ensureRecommendationStream(key: string, body: AISearchResultsProps, ref
         refresh,
     }, signal).catch((error) => {
         if (signal?.aborted || (error as Error)?.name === "AbortError") {
+            const current = resultCache.get(key);
+            if (current && current.items.length === 0) {
+                resultCache.delete(key);
+            } else if (current) {
+                updateStreamState(key, (state) => ({ ...state, status: "done" }));
+            }
             return;
         }
         console.error("AI Search Process failed", error);
@@ -151,6 +257,50 @@ export function AISearchResults({ mood, type, with_genres, page = 1 }: AISearchR
         () => getStreamState(cacheKey),
     );
 
+    const isSemantic = Boolean(
+        state.isSemantic ||
+        (state.items.length > 0 && state.items.some((i) => i.aiMeta?.source === "fallback" || i.aiMeta?.source === "rate_limited"))
+    );
+
+    const resetAt = state.rateLimit?.resetAt;
+
+    const [secondsLeft, setSecondsLeft] = useState<number>(() => {
+        if (!resetAt) return 60;
+        return Math.max(0, Math.ceil((resetAt - Date.now()) / 1000));
+    });
+
+    // Real-time countdown timer tracking when AI resets the quota in current time
+    useEffect(() => {
+        if (!isSemantic) return;
+
+        const updateTimer = () => {
+            const target = resetAt || (Date.now() + 60_000);
+            const remaining = Math.max(0, Math.ceil((target - Date.now()) / 1000));
+            setSecondsLeft(remaining);
+        };
+
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+    }, [isSemantic, resetAt]);
+
+    // If semantic results are loaded and resetAt is not yet synchronized, query current AI quota
+    useEffect(() => {
+        if (isSemantic && !resetAt) {
+            fetch("/api/ai/recommendations")
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data?.rateLimit) {
+                        updateStreamState(cacheKey, (s) => ({
+                            ...s,
+                            rateLimit: data.rateLimit,
+                        }));
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [isSemantic, resetAt, cacheKey]);
+
     useEffect(() => {
         abortControllerRef.current?.abort();
         const controller = new AbortController();
@@ -173,7 +323,7 @@ export function AISearchResults({ mood, type, with_genres, page = 1 }: AISearchR
         const controller = new AbortController();
         abortControllerRef.current = controller;
         streamRequests.delete(cacheKey);
-        updateStreamState(cacheKey, () => ({ items: [], status: "streaming" }));
+        updateStreamState(cacheKey, () => ({ items: [], status: "streaming", isSemantic: false }));
         ensureRecommendationStream(cacheKey, { mood, type, with_genres, page }, true, controller.signal);
     };
 
@@ -185,6 +335,48 @@ export function AISearchResults({ mood, type, with_genres, page = 1 }: AISearchR
                 </h2>
                 {state.status === "streaming" && <span className="text-sm text-purple-300">Results appear as they are found</span>}
             </div>
+
+            {/* Frosted-glass banner with countdown timer & action button when semantic/fallback results are loaded */}
+            {isSemantic && (
+                <div className="mt-6 mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-2xl p-4 sm:p-5 shadow-2xl">
+                    <div className="flex items-start sm:items-center gap-3.5">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-purple-500/20 bg-purple-500/10 text-purple-300">
+                            <Clock className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-white">
+                                    Showing Instant Semantic Results
+                                </span>
+                                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-gray-300">
+                                    Fallback
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-xs text-gray-400">
+                                AI generation is paused until quota resets {secondsLeft > 0 ? (
+                                    <>in <span className="font-mono font-semibold text-purple-300">{secondsLeft}s</span></>
+                                ) : (
+                                    <span className="font-semibold text-emerald-400">— ready to retry</span>
+                                )}.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2.5 self-end sm:self-center">
+                        <button
+                            type="button"
+                            onClick={regeneratePage}
+                            disabled={state.status === "streaming"}
+                            className={secondsLeft === 0
+                                ? "inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-500/25 transition hover:from-purple-500 hover:to-indigo-500 hover:shadow-purple-500/40 active:scale-95 cursor-pointer disabled:opacity-50"
+                                : "inline-flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-2 text-sm font-medium text-purple-200 backdrop-blur-xl transition hover:bg-purple-500/20 active:scale-95 cursor-pointer disabled:opacity-50"
+                            }
+                        >
+                            <RefreshCw className={`h-4 w-4 ${state.status === "streaming" ? "animate-spin" : ""}`} />
+                            <span>{secondsLeft === 0 ? "Retry AI Now" : `Retry AI (${secondsLeft}s)`}</span>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {(state.items.length > 0 || state.status === "streaming") && (
                 <MovieGrid

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Star, Quote, Heart, PlayCircle, Users, Info } from "lucide-react";
 import Link from "next/link";
 import Image from "./ui/image";
@@ -44,8 +44,19 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
     const [hasRun, setHasRun] = useState(false);
     const [isFallback, setIsFallback] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        return () => {
+            abortControllerRef.current?.abort();
+        };
+    }, []);
 
     async function fetchSimilar() {
+        abortControllerRef.current?.abort();
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         setHasRun(true);
         setLoading(true);
         setError(null);
@@ -57,6 +68,7 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ mode: "similar", title, overview, genres, sourceType: type, tmdbId }),
+                signal: controller.signal,
             });
 
             if (!response.ok || !response.body) throw new Error("Failed to start recommendation stream.");
