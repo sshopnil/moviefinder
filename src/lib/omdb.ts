@@ -14,7 +14,8 @@ export async function getExternalRatings(title: string, year?: string): Promise<
     }
 
     try {
-        const url = `https://www.omdbapi.com/?t=${encodeURIComponent(title)}&y=${year}&apikey=${apiKey}`;
+        const yearParam = year && year !== "undefined" && year.trim() !== "" ? `&y=${encodeURIComponent(year.trim())}` : "";
+        const url = `https://www.omdbapi.com/?t=${encodeURIComponent(title)}${yearParam}&apikey=${apiKey}`;
         const res = await fetch(url, {
             signal: AbortSignal.timeout(8000),
             next: { revalidate: 3600 },

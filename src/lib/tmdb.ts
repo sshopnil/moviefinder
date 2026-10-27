@@ -2,7 +2,7 @@
 const BASE_URL = "https://api.themoviedb.org/3";
 const IMAGE_BASE_URL = "https://image.tmdb.org/t/p";
 
-import { Movie, MovieDetails, MovieResponse, TVSeries, TVDetails } from "@/types/movie";
+import type { Movie, MovieDetails, MovieResponse, TVSeries, TVDetails } from "../types/movie.ts";
 
 export const TMDB_IMAGE_URL = {
     poster: (path: string | null) => path ? `${IMAGE_BASE_URL}/w500${path}` : "/placeholder-poster.png",
@@ -10,6 +10,15 @@ export const TMDB_IMAGE_URL = {
     profile: (path: string | null) => path ? `${IMAGE_BASE_URL}/h632${path}` : "/placeholder-profile.png",
     logo: (path: string | null) => path ? `${IMAGE_BASE_URL}/w154${path}` : "/placeholder-icon.png",
 };
+
+export class TMDBError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+        super(message);
+        this.name = "TMDBError";
+        this.status = status;
+    }
+}
 
 async function fetchFromTMDB<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
     const apiKey = process.env.TMDB_API_KEY;
@@ -37,7 +46,7 @@ async function fetchFromTMDB<T>(endpoint: string, params: Record<string, string>
     });
 
     if (!response.ok) {
-        throw new Error(`TMDB API Error: ${response.statusText}`);
+        throw new TMDBError(`TMDB API Error: ${response.status} ${response.statusText}`, response.status);
     }
 
     return response.json();

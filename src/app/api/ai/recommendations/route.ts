@@ -1,5 +1,6 @@
 import { getSemanticMoodRecommendations, streamRecommendationsFromMood, streamSeasonRanking, streamSimilarContent, isAIRateLimitError } from "@/lib/ai";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { validateRequestOrigin } from "@/lib/security";
 import { movieService, tvService } from "@/lib/tmdb";
 import { Movie, Season, TVSeries } from "@/types/movie";
 
@@ -38,6 +39,14 @@ function selectExactTitle<T extends Movie | TVSeries>(matches: T[], requestedTit
 }
 
 export async function POST(request: Request) {
+    const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+    const origin = request.headers.get("origin");
+    const referer = request.headers.get("referer");
+
+    if (!validateRequestOrigin(host, origin, referer)) {
+        return Response.json({ error: "Invalid origin" }, { status: 403 });
+    }
+
     const clientIp = await getClientIp();
     const ipLimit = checkRateLimit(`ai-rec:${clientIp}`, 25, 10 * 60 * 1000);
     if (!ipLimit.allowed) {
@@ -73,7 +82,11 @@ export async function POST(request: Request) {
         async start(controller) {
             const send = (event: unknown) => {
                 if (request.signal.aborted) return;
-                controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+                try {
+                    controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+                } catch {
+                    // Stream may have been closed or aborted
+                }
             };
             const seen = new Set<string>();
             let usedFallback = false;
@@ -218,7 +231,11 @@ export async function POST(request: Request) {
                     send({ type: "error", message: "Failed to get recommendations." });
                 }
             } finally {
-                controller.close();
+                try {
+                    controller.close();
+                } catch {
+                    // Safely ignore if controller is already closed
+                }
             }
         },
     });

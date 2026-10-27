@@ -1,8 +1,6 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
 
 interface MoodSelectorProps {
     onMoodSubmit: (mood: string) => void;
@@ -22,8 +20,7 @@ export function MoodSelector({ onMoodSubmit, isLoading }: MoodSelectorProps) {
     return (
         <div className="w-full max-w-2xl mx-auto mt-8">
             <div className="glass-card p-6 rounded-2xl">
-                <div className="flex items-center gap-2 mb-4 text-white/80">
-                    <Sparkles className="h-5 w-5 text-purple-400" />
+                <div className="mb-4 text-white/80">
                     <h3 className="text-lg font-medium">Find by Mood (AI)</h3>
                 </div>
 

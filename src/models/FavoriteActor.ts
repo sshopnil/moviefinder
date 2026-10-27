@@ -21,5 +21,6 @@ const FavoriteActorSchema = new mongoose.Schema(
 
 // Compound index to ensure unique favorites per user
 FavoriteActorSchema.index({ userId: 1, actorId: 1 }, { unique: true });
+FavoriteActorSchema.index({ userId: 1, createdAt: -1 });
 
 export default mongoose.models.FavoriteActor || mongoose.model("FavoriteActor", FavoriteActorSchema);

@@ -7,7 +7,7 @@ import AICache from "@/models/AICache";
 import dbConnect from "@/lib/db";
 import { movieService, tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 
-const AI_MODEL = process.env.GEMINI_MODEL || "gemma-4-31b-it";
+const AI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 const MAX_RPM = 15;
 const AI_CACHE_DB_TIMEOUT_MS = 1500;
 

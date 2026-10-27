@@ -110,8 +110,9 @@ export async function updateUserPassword(prevState: any, formData: FormData) {
             return { error: "User not found" };
         }
 
-        // If user has a password, verify current password
-        if (user.password) {
+        // If user has a password and is NOT logged in via OAuth (e.g. Google), verify current password
+        const isOAuth = session.user.authProvider === "google" || (Boolean(session.user.authProvider) && session.user.authProvider !== "credentials");
+        if (user.password && !isOAuth) {
             if (!currentPassword) {
                 return { error: "Current password is required" };
             }

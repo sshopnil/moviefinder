@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Brain, Clapperboard, Film, Sparkles } from "lucide-react";
+import { Brain, Clapperboard, Film } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function BrainLoader({ variant = "fullscreen", message = "BRAIN IS BRAINING" }: { variant?: "fullscreen" | "section", message?: string }) {
@@ -86,7 +86,7 @@ export function BrainLoader({ variant = "fullscreen", message = "BRAIN IS BRAINI
                 </motion.div>
 
                 <div className="absolute -bottom-3 left-1/2 flex -translate-x-1/2 gap-2">
-                    {[Film, Clapperboard, Sparkles].map((Icon, i) => (
+                    {[Film, Clapperboard].map((Icon, i) => (
                         <motion.div
                             key={i}
                             className="rounded-full border border-white/10 bg-white/10 p-1.5 text-purple-200 backdrop-blur"

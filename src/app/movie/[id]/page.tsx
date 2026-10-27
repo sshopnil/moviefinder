@@ -56,6 +56,8 @@ export default async function MoviePage({ params }: Props) {
     const { id } = await params;
 
     if (!id) return notFound();
+    const movieId = parseInt(id, 10);
+    if (!Number.isFinite(movieId)) return notFound();
 
     let movie;
 
@@ -63,7 +65,7 @@ export default async function MoviePage({ params }: Props) {
     let watchedStatus = false;
 
     try {
-        movie = await movieService.getMovieDetails(parseInt(id));
+        movie = await movieService.getMovieDetails(movieId);
 
         if (!movie) return notFound();
 
@@ -71,17 +73,21 @@ export default async function MoviePage({ params }: Props) {
         // Log view removed to prevent revalidatePath error during render.
         // History is now tracked via WatchProviders when user plays content.
 
-        const status = await getWatchlistStatusAction(parseInt(id), "movie");
+        const status = await getWatchlistStatusAction(movieId, "movie");
         if (status) {
             savedStatus = status.isSaved;
             watchedStatus = status.isWatched;
         }
-    } catch (e) {
+    } catch (e: any) {
+        if (e && typeof e === 'object' && 'digest' in e && typeof e.digest === 'string' && (e.digest.startsWith('NEXT_REDIRECT') || e.digest.startsWith('NEXT_NOT_FOUND'))) {
+            throw e;
+        }
+
         // Attempt to find if it's a TV show (handling broken legacy watchlist links)
         let tvCheck = null;
         try {
-            tvCheck = await tvService.getTVDetails(parseInt(id));
-        } catch (innerError) {
+            tvCheck = await tvService.getTVDetails(movieId);
+        } catch {
             // Ignore API (404) errors for TV check, it means it really doesn't exist
         }
 
@@ -89,8 +95,13 @@ export default async function MoviePage({ params }: Props) {
             redirect(`/tv/${id}`);
         }
 
-        console.error(e);
-        return notFound();
+        // Only return notFound() if TMDB explicitly returned a 404
+        if (e?.status === 404) {
+            return notFound();
+        }
+
+        console.error("MoviePage error:", e);
+        throw e;
     }
 
     return (

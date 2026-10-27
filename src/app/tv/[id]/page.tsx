@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { tvService, movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BackButton } from "@/components/back-button";
-import { Calendar, Clock, Star, Tv, Sparkles } from "lucide-react";
+import { Calendar, Clock, Star, Tv } from "lucide-react";
 import Image from "@/components/ui/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -55,13 +55,15 @@ export default async function TVPage({ params, searchParams }: Props) {
     const { season, episode } = await searchParams;
 
     if (!id) return notFound();
+    const tvId = parseInt(id, 10);
+    if (!Number.isFinite(tvId)) return notFound();
 
     let tv;
     let savedStatus = false;
     let watchedStatus = false;
 
     try {
-        tv = await tvService.getTVDetails(parseInt(id));
+        tv = await tvService.getTVDetails(tvId);
 
         if (!tv) return notFound();
 
@@ -69,17 +71,21 @@ export default async function TVPage({ params, searchParams }: Props) {
         // Log view removed to prevent revalidatePath error during render.
         // History is now tracked via WatchProviders when user plays content.
 
-        const status = await getWatchlistStatusAction(parseInt(id), "tv");
+        const status = await getWatchlistStatusAction(tvId, "tv");
         if (status) {
             savedStatus = status.isSaved;
             watchedStatus = status.isWatched;
         }
-    } catch (e) {
+    } catch (e: any) {
+        if (e && typeof e === 'object' && 'digest' in e && typeof e.digest === 'string' && (e.digest.startsWith('NEXT_REDIRECT') || e.digest.startsWith('NEXT_NOT_FOUND'))) {
+            throw e;
+        }
+
         // Attempt to find if it's a Movie (handling broken legacy watchlist links)
         let movieCheck = null;
         try {
-            movieCheck = await movieService.getMovieDetails(parseInt(id));
-        } catch (innerError) {
+            movieCheck = await movieService.getMovieDetails(tvId);
+        } catch {
             // Ignore API (404) errors for movie check
         }
 
@@ -87,8 +93,13 @@ export default async function TVPage({ params, searchParams }: Props) {
             redirect(`/movie/${id}`);
         }
 
-        console.error(e);
-        return notFound();
+        // Only return notFound() if TMDB explicitly returned a 404
+        if (e?.status === 404) {
+            return notFound();
+        }
+
+        console.error("TVPage error:", e);
+        throw e;
     }
 
     return (

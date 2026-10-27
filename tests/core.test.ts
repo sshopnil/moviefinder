@@ -4,15 +4,15 @@ import tmdbLoader from "../src/lib/image-loader.ts";
 import { checkRateLimit } from "../src/lib/rate-limit.ts";
 
 describe("tmdbLoader", () => {
-    it("rewrites TMDB poster URLs to the appropriate size without query strings", () => {
+    it("rewrites TMDB poster URLs to the appropriate size with width parameter", () => {
         const src = "https://image.tmdb.org/t/p/w500/abc123.jpg";
         assert.equal(
             tmdbLoader({ src, width: 300 }),
-            "https://image.tmdb.org/t/p/w342/abc123.jpg"
+            "https://image.tmdb.org/t/p/w342/abc123.jpg?w=300"
         );
         assert.equal(
             tmdbLoader({ src, width: 640 }),
-            "https://image.tmdb.org/t/p/w780/abc123.jpg"
+            "https://image.tmdb.org/t/p/w780/abc123.jpg?w=640"
         );
     });
 
@@ -20,11 +20,11 @@ describe("tmdbLoader", () => {
         const src = "https://image.tmdb.org/t/p/w1280/backdrop.jpg";
         assert.equal(
             tmdbLoader({ src, width: 1920 }),
-            "https://image.tmdb.org/t/p/w1280/backdrop.jpg"
+            "https://image.tmdb.org/t/p/w1280/backdrop.jpg?w=1920"
         );
         assert.equal(
             tmdbLoader({ src, width: 640 }),
-            "https://image.tmdb.org/t/p/w780/backdrop.jpg"
+            "https://image.tmdb.org/t/p/w780/backdrop.jpg?w=640"
         );
     });
 
@@ -32,11 +32,11 @@ describe("tmdbLoader", () => {
         const src = "https://image.tmdb.org/t/p/h632/actor.jpg";
         assert.equal(
             tmdbLoader({ src, width: 100 }),
-            "https://image.tmdb.org/t/p/w185/actor.jpg"
+            "https://image.tmdb.org/t/p/w185/actor.jpg?w=100"
         );
         assert.equal(
             tmdbLoader({ src, width: 300 }),
-            "https://image.tmdb.org/t/p/h632/actor.jpg"
+            "https://image.tmdb.org/t/p/h632/actor.jpg?w=300"
         );
     });
 

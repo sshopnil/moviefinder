@@ -70,17 +70,26 @@ export async function toggleWatchlistAction(movie: WatchlistInput) {
         revalidateMediaPaths(movie.id, mediaType);
         return { added: false };
     } else {
-        await Watchlist.create({
-            userId: session.user.id,
-            movieId: getStoredMovieId(movie.id, mediaType),
-            title: movie.title,
-            poster_path: movie.poster_path,
-            vote_average: movie.vote_average,
-            release_date: movie.release_date,
-            genre_ids: movie.genre_ids,
-            watched: false,
-            media_type: mediaType,
-        });
+        try {
+            await Watchlist.create({
+                userId: session.user.id,
+                movieId: getStoredMovieId(movie.id, mediaType),
+                title: movie.title,
+                poster_path: movie.poster_path,
+                vote_average: movie.vote_average,
+                release_date: movie.release_date,
+                genre_ids: movie.genre_ids,
+                watched: false,
+                media_type: mediaType,
+            });
+        } catch (error: any) {
+            if (error?.code === 11000) {
+                const current = await Watchlist.findOne(getStatusQuery(session.user.id, movie.id, mediaType));
+                revalidateMediaPaths(movie.id, mediaType);
+                return { added: !!current };
+            }
+            throw error;
+        }
         revalidateMediaPaths(movie.id, mediaType);
         return { added: true };
     }
@@ -107,25 +116,35 @@ export async function toggleWatchedAction(movie: WatchlistInput) {
         // Toggle watched status
         existing.watched = !existing.watched;
         await existing.save();
+        revalidateMediaPaths(movie.id, mediaType);
+        return { watched: existing.watched };
     } else {
         // Create new entry with watched = true
-        await Watchlist.create({
-            userId: session.user.id,
-            movieId: getStoredMovieId(movie.id, mediaType),
-            title: movie.title,
-            poster_path: movie.poster_path,
-            vote_average: movie.vote_average,
-            release_date: movie.release_date,
-            genre_ids: movie.genre_ids,
-            watched: true,
-            media_type: mediaType,
-        });
+        let finalWatched = true;
+        try {
+            await Watchlist.create({
+                userId: session.user.id,
+                movieId: getStoredMovieId(movie.id, mediaType),
+                title: movie.title,
+                poster_path: movie.poster_path,
+                vote_average: movie.vote_average,
+                release_date: movie.release_date,
+                genre_ids: movie.genre_ids,
+                watched: true,
+                media_type: mediaType,
+            });
+        } catch (error: any) {
+            if (error?.code === 11000) {
+                const current = await Watchlist.findOne(getStatusQuery(session.user.id, movie.id, mediaType));
+                finalWatched = current ? !!current.watched : true;
+            } else {
+                throw error;
+            }
+        }
+
+        revalidateMediaPaths(movie.id, mediaType);
+        return { watched: finalWatched };
     }
-
-    revalidateMediaPaths(movie.id, mediaType);
-
-    // Return the new state
-    return { watched: existing ? existing.watched : true };
 }
 
 export async function getWatchlistStatusAction(movieId: number, mediaType: WatchlistMediaType = "movie") {

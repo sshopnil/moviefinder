@@ -4,7 +4,15 @@ declare module "next-auth" {
     interface Session {
         user: {
             id: string;
+            authProvider?: string;
         } & DefaultSession["user"]
+    }
+}
+
+declare module "@auth/core/jwt" {
+    interface JWT {
+        id?: string;
+        authProvider?: string;
     }
 }
 
@@ -126,6 +134,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return true;
         },
         async jwt({ token, user, account, trigger, session }) {
+            if (account?.provider) {
+                token.authProvider = account.provider;
+            }
+
             if (trigger === "update" && session?.user) {
                 if (session.user.name) token.name = session.user.name;
                 if (session.user.email) token.email = session.user.email;
@@ -158,6 +170,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 session.user.id = token.id as string;
                 session.user.name = token.name ?? null;
                 session.user.email = token.email ?? "";
+                if (token.authProvider) {
+                    session.user.authProvider = token.authProvider as string;
+                }
             }
             return session;
         }

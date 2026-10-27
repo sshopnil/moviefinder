@@ -49,7 +49,11 @@ async function connectToDatabase() {
     }
 
     if (cached.conn) {
-        return cached.conn;
+        if (cached.conn.connection.readyState === 1) {
+            return cached.conn;
+        }
+        cached.conn = null;
+        cached.promise = null;
     }
 
     if (!cached.promise) {
@@ -73,6 +77,7 @@ async function connectToDatabase() {
         cached.conn = await cached.promise;
     } catch (e) {
         cached.promise = null;
+        cached.conn = null;
         throw e;
     }
 

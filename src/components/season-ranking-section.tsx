@@ -3,7 +3,7 @@
 import { SeasonRanking } from "@/components/season-ranking";
 import { Season } from "@/types/movie";
 import { Loader2, Trophy } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Ranking = {
     season_number: number;
@@ -24,8 +24,19 @@ export function SeasonRankingSection({ title, seasons }: SeasonRankingSectionPro
     const [rankings, setRankings] = useState<Ranking[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isPending, setIsPending] = useState(false);
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        return () => {
+            abortControllerRef.current?.abort();
+        };
+    }, []);
 
     function runRanking() {
+        abortControllerRef.current?.abort();
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         setError(null);
         setRankings([]);
         setIsPending(true);
@@ -36,6 +47,7 @@ export function SeasonRankingSection({ title, seasons }: SeasonRankingSectionPro
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ mode: "season-ranking", title, seasons }),
+                    signal: controller.signal,
                 });
 
                 if (!response.ok || !response.body) throw new Error("Failed to start season ranking stream.");
@@ -71,11 +83,16 @@ export function SeasonRankingSection({ title, seasons }: SeasonRankingSectionPro
                     setError("Season ranking is unavailable right now.");
                 }
             } catch (error) {
+                if (controller.signal.aborted || (error as Error)?.name === "AbortError") {
+                    return;
+                }
                 console.error("Failed to rank seasons", error);
                 setRankings(null);
                 setError("Season ranking failed. Try again in a moment.");
             } finally {
-                setIsPending(false);
+                if (!controller.signal.aborted) {
+                    setIsPending(false);
+                }
             }
         })();
     }

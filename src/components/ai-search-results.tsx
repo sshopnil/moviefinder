@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
-import { ChevronLeft, ChevronRight, RefreshCw, Sparkles } from "lucide-react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MovieGrid } from "@/components/movie-grid";
 import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
@@ -74,11 +74,12 @@ function getPreviouslyShownTitles(mood: string, page: number) {
     return Array.from(new Set(titles));
 }
 
-async function readRecommendationStream(key: string, body: AISearchResultsProps & { excludeTitles?: string[]; refresh?: boolean }) {
+async function readRecommendationStream(key: string, body: AISearchResultsProps & { excludeTitles?: string[]; refresh?: boolean }, signal?: AbortSignal) {
     const response = await fetch("/api/ai/recommendations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal,
     });
 
     if (!response.ok || !response.body) throw new Error("Failed to start recommendation stream.");
@@ -116,7 +117,7 @@ async function readRecommendationStream(key: string, body: AISearchResultsProps 
     updateStreamState(key, (state) => ({ ...state, status: state.error ? "error" : "done" }));
 }
 
-function ensureRecommendationStream(key: string, body: AISearchResultsProps, refresh = false) {
+function ensureRecommendationStream(key: string, body: AISearchResultsProps, refresh = false, signal?: AbortSignal) {
     if (streamRequests.has(key) || getStreamState(key).status !== "streaming") return;
     streamRequests.add(key);
 
@@ -124,7 +125,10 @@ function ensureRecommendationStream(key: string, body: AISearchResultsProps, ref
         ...body,
         excludeTitles: getPreviouslyShownTitles(body.mood, body.page || 1),
         refresh,
-    }).catch((error) => {
+    }, signal).catch((error) => {
+        if (signal?.aborted || (error as Error)?.name === "AbortError") {
+            return;
+        }
         console.error("AI Search Process failed", error);
         updateStreamState(key, (state) => ({
             ...state,
@@ -140,6 +144,7 @@ export function AISearchResults({ mood, type, with_genres, page = 1 }: AISearchR
     const router = useRouter();
     const searchParams = useSearchParams();
     const cacheKey = JSON.stringify({ mood, type, with_genres, page });
+    const abortControllerRef = useRef<AbortController | null>(null);
     const state = useSyncExternalStore(
         (listener) => subscribeToStream(cacheKey, listener),
         () => getStreamState(cacheKey),
@@ -147,7 +152,13 @@ export function AISearchResults({ mood, type, with_genres, page = 1 }: AISearchR
     );
 
     useEffect(() => {
-        ensureRecommendationStream(cacheKey, { mood, type, with_genres, page });
+        abortControllerRef.current?.abort();
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        ensureRecommendationStream(cacheKey, { mood, type, with_genres, page }, false, controller.signal);
+        return () => {
+            controller.abort();
+        };
     }, [cacheKey, mood, page, type, with_genres]);
 
     const navigateToPage = (nextPage: number) => {
@@ -158,9 +169,12 @@ export function AISearchResults({ mood, type, with_genres, page = 1 }: AISearchR
     };
 
     const regeneratePage = () => {
+        abortControllerRef.current?.abort();
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
         streamRequests.delete(cacheKey);
         updateStreamState(cacheKey, () => ({ items: [], status: "streaming" }));
-        ensureRecommendationStream(cacheKey, { mood, type, with_genres, page }, true);
+        ensureRecommendationStream(cacheKey, { mood, type, with_genres, page }, true, controller.signal);
     };
 
     return (
@@ -185,8 +199,7 @@ export function AISearchResults({ mood, type, with_genres, page = 1 }: AISearchR
             )}
 
             {state.status === "done" && state.items.length === 0 && (
-                <div className="flex items-center justify-center gap-2 py-20 text-gray-500">
-                    <Sparkles className="h-4 w-4" />
+                <div className="py-20 text-center text-gray-500">
                     No results found for your mood. Try describing it differently.
                 </div>
             )}

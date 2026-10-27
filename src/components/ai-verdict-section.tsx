@@ -6,7 +6,7 @@ import type { ExternalRatings } from "@/lib/omdb";
 import { AIVerdictSkeleton } from "@/components/ai-result-skeletons";
 import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
 import { ExpandableText } from "@/components/ui/expandable-text";
-import { Heart, Quote, Sparkles, User, Zap } from "lucide-react";
+import { Heart, Quote, User, Zap } from "lucide-react";
 
 type AIRateLimitNotice = {
     limit: number;
@@ -79,13 +79,9 @@ export function AIVerdictSection({ mediaType, id, title, releaseDate, initialRat
     if (!insights) {
         return (
             <div className="relative overflow-hidden rounded-xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/30 to-purple-950/20 p-6">
-                <div className="absolute right-0 top-0 p-4 opacity-10">
-                    <Sparkles className="h-24 w-24 text-white" />
-                </div>
                 <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-indigo-300">
-                            <Sparkles className="h-5 w-5" />
+                        <div className="text-sm font-bold uppercase tracking-wider text-indigo-300">
                             AI Verdict
                         </div>
                         <p className="max-w-2xl text-sm leading-6 text-gray-300">
@@ -96,9 +92,8 @@ export function AIVerdictSection({ mediaType, id, title, releaseDate, initialRat
                     <button
                         type="button"
                         onClick={runVerdict}
-                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-gray-200"
+                        className="inline-flex shrink-0 items-center justify-center rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-gray-200"
                     >
-                        <Sparkles className="h-4 w-4" />
                         Run AI Verdict
                     </button>
                 </div>
@@ -109,13 +104,9 @@ export function AIVerdictSection({ mediaType, id, title, releaseDate, initialRat
     return (
         <div className="grid gap-6 md:grid-cols-1">
             <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/20 p-6 shadow-lg transform transition-all hover:scale-[1.01]">
-                <div className="absolute top-0 right-0 p-4 opacity-10">
-                    <Sparkles className="h-24 w-24 text-white" />
-                </div>
                 <div className="relative z-10">
                     <div className="flex items-center justify-between gap-4 mb-4">
-                        <div className="flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-indigo-400 animate-pulse" />
+                        <div>
                             <span className="text-sm font-bold text-indigo-300 uppercase tracking-wider">AI Verdict</span>
                         </div>
                         <button

@@ -2,7 +2,7 @@
 
 import { Movie, TVSeries, AIRecommendation } from "@/types/movie";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
-import { Star, PlayCircle, Users, Sparkles, Heart, Info, Quote } from "lucide-react";
+import { Star, PlayCircle, Users, Heart, Info, Quote } from "lucide-react";
 import Image from "@/components/ui/image";
 import Link from "next/link";
 
@@ -60,8 +60,7 @@ export function AIRecommendationCard({ movie }: AIRecommendationCardProps) {
             <div className="p-4 flex flex-col gap-4 flex-1 text-sm">
                 {/* Why Matches */}
                 <div className="space-y-1">
-                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 uppercase tracking-wider">
-                        <Sparkles className="h-3 w-3" />
+                    <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">
                         {isFallback ? "Related through TMDB themes" : "Why it matches your mood"}
                     </div>
                     {!isFallback && movie.aiMeta?.reason ? (

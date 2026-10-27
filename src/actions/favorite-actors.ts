@@ -38,13 +38,26 @@ export async function toggleFavoriteActorAction(actor: ActorData) {
         revalidatePath(`/person/${actor.id}`);
         return { isFavorite: false };
     } else {
-        await FavoriteActor.create({
-            userId: session.user.id,
-            actorId: actor.id,
-            name: actor.name,
-            profile_path: actor.profile_path,
-            known_for_department: actor.known_for_department,
-        });
+        try {
+            await FavoriteActor.create({
+                userId: session.user.id,
+                actorId: actor.id,
+                name: actor.name,
+                profile_path: actor.profile_path,
+                known_for_department: actor.known_for_department,
+            });
+        } catch (error: any) {
+            if (error?.code === 11000) {
+                const current = await FavoriteActor.findOne({
+                    userId: session.user.id,
+                    actorId: actor.id,
+                });
+                revalidatePath("/watchlist");
+                revalidatePath(`/person/${actor.id}`);
+                return { isFavorite: !!current };
+            }
+            throw error;
+        }
         revalidatePath("/watchlist");
         revalidatePath(`/person/${actor.id}`);
         return { isFavorite: true };

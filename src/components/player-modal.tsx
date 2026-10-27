@@ -1,7 +1,10 @@
+"use client";
+
 import { X, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { logViewAction } from "@/actions/history";
+import { sanitizePlayerProgress } from "@/lib/player";
 
 interface PlayerModalProps {
     url: string;
@@ -39,10 +42,9 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
             // Vidsrc specific message format
             try {
                 const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-                const currentTime = data?.data?.currentTime || data?.currentTime || data?.time;
-                const duration = data?.data?.duration || data?.duration;
+                const progress = sanitizePlayerProgress(data);
 
-                if (typeof currentTime === 'number' && typeof duration === 'number' && duration > 0) {
+                if (progress) {
                     lastUpdateRef.current = now;
                     // Log progress (minutes) without triggering server cache revalidation storms
                     void logViewAction({
@@ -52,8 +54,8 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
                         poster_path: poster_path,
                         season,
                         episode,
-                        progress: Math.floor(currentTime / 60),
-                        duration: Math.floor(duration / 60),
+                        progress: progress.progressMins,
+                        duration: progress.durationMins,
                         revalidate: false,
                     });
                 }
@@ -152,6 +154,7 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
                     className="w-full h-full flex-1 border-0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture"
                     referrerPolicy="no-referrer"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
                     allowFullScreen
                 />
             </div>
