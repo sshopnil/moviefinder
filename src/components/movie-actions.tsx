@@ -1,7 +1,7 @@
 "use client";
 
 import { Play, Check, Eye, Loader2 } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { TrailerModal } from "@/components/trailer-modal";
 import { WatchlistButton } from "@/components/watchlist-button";
 import { MovieDetails } from "@/types/movie";
@@ -62,7 +62,7 @@ export function MovieActions({ movie, isSaved, isWatched }: MovieActionsProps) {
 function WatchedButton({ movie, initialIsWatched }: { movie: any, initialIsWatched: boolean }) {
     const { data: session, status } = useSession();
     const [isWatched, setIsWatched] = useState(initialIsWatched);
-    const [isPending, startTransition] = useTransition();
+    const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
@@ -70,51 +70,52 @@ function WatchedButton({ movie, initialIsWatched }: { movie: any, initialIsWatch
     }, [initialIsWatched]);
 
     const handleToggle = async () => {
-        if (status === "loading") return;
+        if (status === "loading" || isLoading) return;
 
         if (!session) {
             router.push("/login?callbackUrl=" + window.location.pathname);
             return;
         }
 
-        const newState = !isWatched;
+        const previousState = isWatched;
+        const newState = !previousState;
         setIsWatched(newState);
+        setIsLoading(true);
 
-        startTransition(async () => {
-            try {
-                const result = await toggleWatchedAction({
-                    id: movie.id,
-                    title: movie.title,
-                    poster_path: movie.poster_path,
-                    vote_average: movie.vote_average,
-                    release_date: movie.release_date,
-                    genre_ids: movie.genre_ids || [],
-                    media_type: movie.media_type,
-                });
+        try {
+            const result = await toggleWatchedAction({
+                id: movie.id,
+                title: movie.title,
+                poster_path: movie.poster_path,
+                vote_average: movie.vote_average,
+                release_date: movie.release_date,
+                genre_ids: movie.genre_ids || [],
+                media_type: movie.media_type,
+            });
 
-                if (result?.watched !== undefined) {
-                    setIsWatched(result.watched);
-                } else {
-                    setIsWatched(!newState);
-                }
-                router.refresh();
-            } catch (error) {
-                console.error(error);
-                setIsWatched(!newState);
+            if (result?.watched !== undefined) {
+                setIsWatched(result.watched);
+            } else {
+                setIsWatched(previousState);
             }
-        });
+        } catch (error) {
+            console.error("Failed to toggle watched:", error);
+            setIsWatched(previousState);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
         <button
             onClick={handleToggle}
-            disabled={isPending || status === "loading"}
+            disabled={isLoading || status === "loading"}
             className={`flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold transition-all border-2 active:scale-[0.98] w-full sm:w-auto ${isWatched
                 ? "bg-green-600 border-green-600 text-white hover:bg-green-700 hover:border-green-700 shadow-lg shadow-green-900/20"
                 : "bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20"
                 }`}
         >
-            {isPending || status === "loading" ? (
+            {isLoading || status === "loading" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
             ) : isWatched ? (
                 <Check className="h-4 w-4 stroke-[3px]" />
