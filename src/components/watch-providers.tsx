@@ -2,7 +2,7 @@
 
 import { WatchProviders as WatchProvidersType, Provider, Season } from "@/types/movie";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import { useState, useMemo } from "react";
 import { Play, Server, Film, Tv } from "lucide-react";
 import { PlayerModal } from "./player-modal";

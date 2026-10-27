@@ -38,13 +38,26 @@ export async function toggleFavoriteActorAction(actor: ActorData) {
         revalidatePath(`/person/${actor.id}`);
         return { isFavorite: false };
     } else {
-        await FavoriteActor.create({
-            userId: session.user.id,
-            actorId: actor.id,
-            name: actor.name,
-            profile_path: actor.profile_path,
-            known_for_department: actor.known_for_department,
-        });
+        try {
+            await FavoriteActor.create({
+                userId: session.user.id,
+                actorId: actor.id,
+                name: actor.name,
+                profile_path: actor.profile_path,
+                known_for_department: actor.known_for_department,
+            });
+        } catch (error: any) {
+            if (error?.code === 11000) {
+                const current = await FavoriteActor.findOne({
+                    userId: session.user.id,
+                    actorId: actor.id,
+                });
+                revalidatePath("/watchlist");
+                revalidatePath(`/person/${actor.id}`);
+                return { isFavorite: !!current };
+            }
+            throw error;
+        }
         revalidatePath("/watchlist");
         revalidatePath(`/person/${actor.id}`);
         return { isFavorite: true };
@@ -63,7 +76,7 @@ export async function getFavoriteActorsAction() {
 
     await connectToDatabase();
 
-    const favorites = await FavoriteActor.find({ userId: session.user.id }).sort({ createdAt: -1 });
+    const favorites = await FavoriteActor.find({ userId: session.user.id }).sort({ createdAt: -1 }).lean();
 
     return favorites.map(f => ({
         id: f.actorId,
@@ -88,7 +101,7 @@ export async function getFavoriteActorStatusAction(actorId: number) {
     const existing = await FavoriteActor.findOne({
         userId: session.user.id,
         actorId: actorId,
-    });
+    }).select({ _id: 1 }).lean();
 
     return !!existing;
 }

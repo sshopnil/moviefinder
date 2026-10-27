@@ -30,5 +30,7 @@ const RecentlyViewedSchema = new mongoose.Schema(
 // Compound index to ensure unique item per user (update timestamp on revisit)
 RecentlyViewedSchema.index({ userId: 1, itemId: 1, itemType: 1 }, { unique: true });
 RecentlyViewedSchema.index({ userId: 1, updatedAt: -1 });
+// Automatically expire view history items older than 180 days
+RecentlyViewedSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 180 * 24 * 60 * 60 });
 
 export default mongoose.models.RecentlyViewed || mongoose.model("RecentlyViewed", RecentlyViewedSchema);

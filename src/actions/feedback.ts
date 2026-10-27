@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const FeedbackSchema = z.object({
@@ -24,6 +25,11 @@ export async function submitFeedbackAction(_prevState: FeedbackState, formData: 
 
     if (!session?.user) {
         return { error: "You must be signed in to send feedback." };
+    }
+
+    const rate = checkRateLimit(`feedback:${session.user.id || session.user.email}`, 5, 60 * 60 * 1000);
+    if (!rate.allowed) {
+        return { error: "You have sent too many feedback items recently. Please try again later." };
     }
 
     const parsed = FeedbackSchema.safeParse({
@@ -62,6 +68,7 @@ export async function submitFeedbackAction(_prevState: FeedbackState, formData: 
                     `User ID: ${session.user.id || "unknown"}`,
                 ].join("\n"),
             }),
+            signal: AbortSignal.timeout(8000),
         });
 
         const data = await response.json();

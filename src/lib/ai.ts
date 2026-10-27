@@ -1,15 +1,16 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, streamObject } from "ai";
+import { createHash } from "node:crypto";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { z } from "zod";
-import AICache from "@/models/AICache";
-import dbConnect from "@/lib/db";
-import { movieService, tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
+import AICache from "../models/AICache.ts";
+import dbConnect from "./db.ts";
+import { movieService, tvService, TMDB_IMAGE_URL } from "./tmdb.ts";
 
-const AI_MODEL = process.env.GEMINI_MODEL || "gemma-4-31b-it";
-const MAX_RPM = 15;
-const AI_CACHE_DB_TIMEOUT_MS = 1500;
+const AI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+const MAX_RPM = Number(process.env.GEMINI_MAX_RPM) || 10;
+const AI_CACHE_DB_TIMEOUT_MS = Number(process.env.AI_CACHE_DB_TIMEOUT_MS) || 5000;
 
 const moodRecommendationSchema = z.object({
     title: z.string().trim().min(1),
@@ -72,6 +73,34 @@ const globalForAIRateLimit = globalThis as typeof globalThis & {
 const aiRateLimit = globalForAIRateLimit.__movieFinderAIRateLimit
     ?? (globalForAIRateLimit.__movieFinderAIRateLimit = { count: 0, resetAt: 0 });
 
+export function getAIRateLimitInfo(): AIRateLimitInfo {
+    const now = Date.now();
+    if (!aiRateLimit.resetAt || now >= aiRateLimit.resetAt) {
+        aiRateLimit.count = 0;
+        aiRateLimit.resetAt = now + 60_000;
+    }
+    const retryAfterSeconds = Math.max(1, Math.ceil((aiRateLimit.resetAt - now) / 1000));
+    return {
+        limit: MAX_RPM,
+        count: aiRateLimit.count,
+        retryAfterSeconds,
+        resetAt: aiRateLimit.resetAt,
+    };
+}
+
+export function markAIRateLimited(retryAfterSeconds = 60) {
+    const now = Date.now();
+    aiRateLimit.resetAt = now + Math.max(10, retryAfterSeconds) * 1000;
+    aiRateLimit.count = MAX_RPM;
+}
+
+export function isQuotaError(error: unknown): boolean {
+    if (!error) return false;
+    const msg = error instanceof Error ? error.message : String(error);
+    const status = (error as any)?.status || (error as any)?.statusCode;
+    return status === 429 || /quota|resource_exhausted|rate limit|429/i.test(msg);
+}
+
 function getAIKey() {
     return process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 }
@@ -132,11 +161,24 @@ async function invokeAI(apiKey: string, input: string, temperature: number = 0.7
 
 async function getCachedData(key: string) {
     try {
-        await withCacheTimeout(dbConnect(), AI_CACHE_DB_TIMEOUT_MS);
-        const cache = await AICache.findOne({ key });
-        if (cache) {
+        const cache = await withCacheTimeout(
+            dbConnect().then(() => AICache.findOne({ key }).lean()),
+            AI_CACHE_DB_TIMEOUT_MS
+        );
+        if (cache && typeof cache === "object" && "data" in cache) {
+            const cachedData = (cache as { data: any }).data;
+            const isFallback = Array.isArray(cachedData)
+                ? cachedData.length === 0 || cachedData.some(item => !item || item.aiMeta?.source === 'fallback' || item.aiMeta?.source === 'rate_limited')
+                : !cachedData || cachedData?.aiMeta?.source === 'fallback' || cachedData?.aiMeta?.source === 'rate_limited';
+
+            if (isFallback) {
+                console.log(`[AICache] Discarding stale fallback cache for ${key}`);
+                void AICache.deleteOne({ key }).catch(() => {});
+                return null;
+            }
+
             console.log(`[AICache] Hit for ${key}`);
-            return cache.data;
+            return cachedData;
         }
     } catch (error) {
         console.log(`[AICache] Skipping cache read for ${key}:`, error instanceof Error ? error.message : error);
@@ -145,27 +187,32 @@ async function getCachedData(key: string) {
 }
 
 async function setCachedData(key: string, data: any) {
-    // CRITICAL: NEVER cache fallback results. This ensures we retry AI when available.
-    // Check if data is array (recs/similar) or object (insights)
+    // CRITICAL: NEVER cache fallback or semantic results. This ensures we retry AI when available.
+    if (!data) return;
+
     const isFallback = Array.isArray(data)
-        ? data.length > 0 && (data[0].aiMeta?.source === 'fallback' || data[0].aiMeta?.source === 'rate_limited')
+        ? data.length === 0 || data.some(item => !item || item.aiMeta?.source === 'fallback' || item.aiMeta?.source === 'rate_limited')
         : data?.aiMeta?.source === 'fallback' || data?.aiMeta?.source === 'rate_limited';
 
     if (isFallback) {
-        console.log(`[AICache] Skipping cache for fallback content: ${key}`);
+        console.log(`[AICache] Skipping cache for fallback/semantic content: ${key}`);
         return;
     }
 
     try {
-        await withCacheTimeout(dbConnect(), AI_CACHE_DB_TIMEOUT_MS);
-        await AICache.findOneAndUpdate(
-            { key },
-            {
-                key,
-                data,
-                modelUsed: AI_MODEL
-            },
-            { upsert: true, new: true }
+        await withCacheTimeout(
+            dbConnect().then(() =>
+                AICache.findOneAndUpdate(
+                    { key },
+                    {
+                        key,
+                        data,
+                        modelUsed: AI_MODEL
+                    },
+                    { upsert: true, new: true }
+                ).lean()
+            ),
+            AI_CACHE_DB_TIMEOUT_MS
         );
         console.log(`[AICache] Saved ${key}`);
     } catch (error) {
@@ -193,66 +240,112 @@ function normalizeScore(score: number): number {
  * Helper to clean AI output and extract JSON
  * Llama-3.1-8b-instant often chats or includes markdown code blocks.
  */
-function cleanLLMOutput(text: string): string {
-    // 1. Remove markdown code blocks like ```json ... ```
-    let clean = text.replace(/```json/g, "").replace(/```/g, "");
+export function cleanLLMOutput(text: string): string {
+    if (!text) return "";
 
-    // 2. Find all top-level JSON blocks using brace counting
+    // 1. Remove markdown code blocks like ```json ... ```
+    const clean = text.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+
+    // Fast path: if the whole cleaned string is already valid JSON, return it
+    try {
+        JSON.parse(clean);
+        return clean;
+    } catch {
+        // Proceed with block extraction
+    }
+
+    // 2. Find all top-level JSON blocks ({...} or [...]) with string awareness
     const blocks: string[] = [];
-    let braceCount = 0;
+    let depth = 0;
     let startIndex = -1;
+    let inString = false;
+    let isEscaped = false;
+    let openChar: "{" | "[" | null = null;
+    let closeChar: "}" | "]" | null = null;
 
     for (let i = 0; i < clean.length; i++) {
-        if (clean[i] === '{') {
-            if (braceCount === 0) startIndex = i;
-            braceCount++;
-        } else if (clean[i] === '}') {
-            braceCount--;
-            if (braceCount === 0 && startIndex !== -1) {
-                blocks.push(clean.substring(startIndex, i + 1));
-                startIndex = -1;
+        const char = clean[i];
+
+        if (inString) {
+            if (isEscaped) {
+                isEscaped = false;
+            } else if (char === "\\") {
+                isEscaped = true;
+            } else if (char === '"') {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (char === '"') {
+            inString = true;
+            continue;
+        }
+
+        if (depth === 0) {
+            if (char === "{" || char === "[") {
+                openChar = char;
+                closeChar = char === "{" ? "}" : "]";
+                depth = 1;
+                startIndex = i;
+            }
+        } else {
+            if (char === openChar) {
+                depth++;
+            } else if (char === closeChar) {
+                depth--;
+                if (depth === 0 && startIndex !== -1) {
+                    blocks.push(clean.substring(startIndex, i + 1));
+                    startIndex = -1;
+                    openChar = null;
+                    closeChar = null;
+                }
             }
         }
     }
 
-    // 3. Select the best block
-    // Filter out blocks that look like schemas (contain "$schema" or "type": "object" at root)
-    const validBlocks = blocks.filter(b => !b.includes('"$schema"') && !b.includes('"type": "object"'));
+    // 3. Filter out schema definition blocks (contain "$schema" or "type": "object")
+    const candidateBlocks = blocks.filter(b => !b.includes('"$schema"') && !b.includes('"type": "object"'));
+    const blocksToTry = candidateBlocks.length > 0 ? candidateBlocks : blocks;
 
-    if (validBlocks.length > 0) {
-        // Return the last valid block (usually the answer after reasoning/schema)
-        return validBlocks[validBlocks.length - 1];
+    // Check candidate blocks from last to first (answers usually follow preamble or chain-of-thought)
+    for (let i = blocksToTry.length - 1; i >= 0; i--) {
+        const candidate = blocksToTry[i];
+        try {
+            JSON.parse(candidate);
+            return candidate;
+        } catch {
+            const withCommas = candidate.replace(/(["\d]|true|false|null)\s*\n\s*("[a-zA-Z0-9_]+":)/g, "$1,\n$2");
+            try {
+                JSON.parse(withCommas);
+                return withCommas;
+            } catch {
+                // Keep trying other candidate blocks
+            }
+        }
     }
 
-    // Fallback: If no "valid" blocks found (maybe schema check was too aggressive), return the last block found
-    if (blocks.length > 0) {
-        return blocks[blocks.length - 1];
+    // 4. Fallback if no block cleanly parsed: return the last block found or trimmed string
+    if (blocksToTry.length > 0) {
+        const lastBlock = blocksToTry[blocksToTry.length - 1];
+        return lastBlock.replace(/(["\d]|true|false|null)\s*\n\s*("[a-zA-Z0-9_]+":)/g, "$1,\n$2");
     }
 
-    // 4. Attempt to fix common JSON errors (missing commas)
-    // Regex looks for: end of value (quote, digit, bool) -> newline -> start of key
-    const fixed = clean.replace(/(["\d]|true|false|null)\s*\n\s*("[a-zA-Z0-9_]+":)/g, '$1,\n$2');
+    return clean;
+}
 
-    // Re-check block logic with fixed string if needed, but usually applying to the extracted block is best.
-    // Let's apply it to the chosen block.
-
-    let bestBlock = clean;
-    if (validBlocks.length > 0) {
-        bestBlock = validBlocks[validBlocks.length - 1];
-    } else if (blocks.length > 0) {
-        bestBlock = blocks[blocks.length - 1];
-    }
-
-    // Apply fix to the best block
-    return bestBlock.replace(/(["\d]|true|false|null)\s*\n\s*("[a-zA-Z0-9_]+":)/g, '$1,\n$2');
+export function makeAICacheKey(prefix: string, ...parts: (string | number | undefined | null)[]): string {
+    const raw = parts.map(p => (p == null ? "" : String(p).trim().toLowerCase())).join(":");
+    const hash = createHash("sha256").update(raw).digest("hex").slice(0, 32);
+    return `${prefix}_${hash}`;
 }
 
 export async function getRecommendationsFromMood(mood: string) {
     const apiKey = getAIKey();
     if (!apiKey) return getMoodFallback(mood);
 
-    // 1. Caching (Bumped to v4 to invalidate old non-normalized scores)
-    const cacheKey = `ai_mood_recs_v5_${mood.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
+    // 1. Caching
+    const cacheKey = makeAICacheKey("ai_mood_recs_v5", mood);
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
@@ -315,18 +408,18 @@ export async function getRecommendationsFromMood(mood: string) {
 
 export async function* streamRecommendationsFromMood(
     mood: string,
-    options: { page?: number; excludeTitles?: string[]; mediaType?: string; refresh?: boolean } = {},
+    options: { page?: number; excludeTitles?: string[]; mediaType?: string; refresh?: boolean; signal?: AbortSignal } = {},
 ) {
     const page = Math.max(1, options.page || 1);
     const apiKey = getAIKey();
     if (!apiKey) {
-        for (const recommendation of await getMoodFallback(mood, page)) yield recommendation;
+        for (const recommendation of await getMoodFallback(mood, page, options.signal)) yield recommendation;
         return;
     }
 
     const mediaType = options.mediaType === "movie" || options.mediaType === "tv" ? options.mediaType : "movie or TV show";
     const excluded = (options.excludeTitles || []).slice(-30);
-    const cacheKey = `ai_mood_recs_v10_${page}_${options.mediaType || 'all'}_${mood.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
+    const cacheKey = makeAICacheKey(`ai_mood_recs_v10_${page}_${options.mediaType || 'all'}`, mood);
     if (!options.refresh) {
         const cached = await getCachedData(cacheKey);
         if (cached) {
@@ -335,63 +428,93 @@ export async function* streamRecommendationsFromMood(
         }
     }
 
-    consumeAIRateLimit();
+    try {
+        consumeAIRateLimit();
+    } catch (error) {
+        if (isAIRateLimitError(error)) {
+            console.warn(`[AI] Rate limit reached. Serving fallback recommendations for mood: "${mood}"`);
+            const fallback = await getMoodFallback(mood, page, options.signal, error.rateLimit);
+            for (const recommendation of fallback) {
+                yield {
+                    ...recommendation,
+                    aiMeta: {
+                        ...(recommendation as any).aiMeta,
+                        source: "rate_limited",
+                        rateLimit: error.rateLimit,
+                    },
+                };
+            }
+            return;
+        }
+        throw error;
+    }
 
     const google = createGoogleGenerativeAI({ apiKey });
     const generated: unknown[] = [];
     const generatedTitles = new Set(excluded.map(title => title.toLowerCase()));
 
-    const candidateTarget = 10;
+    const candidateTarget = 8;
 
-    for (let attempt = 0; attempt < 3 && generated.length < candidateTarget; attempt++) {
-        try {
-            const requestedCount = Math.min(6, candidateTarget - generated.length);
-            const result = streamObject({
-                model: google(AI_MODEL),
-                output: "array",
-                schema: moodRecommendationSchema,
-                temperature: 0.7,
-                maxOutputTokens: 4500,
-                abortSignal: AbortSignal.timeout(30_000),
-                prompt: `Generate batch ${page} of recommendations for this mood: "${mood}".
+    try {
+        for (let attempt = 0; attempt < 2 && generated.length === 0; attempt++) {
+            if (options.signal?.aborted) break;
+            try {
+                const requestedCount = candidateTarget - generated.length;
+                const abortSignal = options.signal
+                    ? AbortSignal.any([AbortSignal.timeout(30_000), options.signal])
+                    : AbortSignal.timeout(30_000);
+
+                const result = streamObject({
+                    model: google(AI_MODEL),
+                    output: "array",
+                    schema: moodRecommendationSchema,
+                    temperature: 0.7,
+                    maxOutputTokens: 4500,
+                    abortSignal,
+                    prompt: `Generate batch ${page} of recommendations for this mood: "${mood}".
 Return exactly ${requestedCount} distinct ${mediaType} recommendations.
 Use specific, varied global titles ordered by relevance. Scores must be from 0 to 100.
 Every recommendation must be a real, released title that can be found on TMDB. Complete every text field with specific analysis; never return empty strings.
 Do not include any of these previously shown or generated titles: ${Array.from(generatedTitles).join(", ") || "none"}.`,
-            });
+                });
 
-            for await (const recommendation of result.elementStream) {
-                const titleKey = recommendation.title.toLowerCase();
-                if (generatedTitles.has(titleKey)) continue;
-                generatedTitles.add(titleKey);
+                for await (const recommendation of result.elementStream) {
+                    const titleKey = recommendation.title.toLowerCase();
+                    if (generatedTitles.has(titleKey)) continue;
+                    generatedTitles.add(titleKey);
 
-                const normalized = {
-                    ...recommendation,
-                    type: normalizeMediaType(recommendation.type),
-                    relevance_score: normalizeScore(recommendation.relevance_score),
-                    aiMeta: { source: "ai" },
-                };
-                generated.push(normalized);
-                yield normalized;
+                    const normalized = {
+                        ...recommendation,
+                        type: normalizeMediaType(recommendation.type),
+                        relevance_score: normalizeScore(recommendation.relevance_score),
+                        aiMeta: { source: "ai" },
+                    };
+                    generated.push(normalized);
+                    yield normalized;
+                }
+            } catch (error) {
+                console.log(`AI Recommendation Stream Attempt ${attempt + 1} Error:`, error);
+                if (isQuotaError(error)) {
+                    markAIRateLimited();
+                }
             }
-        } catch (error) {
-            console.log(`AI Recommendation Stream Attempt ${attempt + 1} Error:`, error);
         }
-    }
 
-    if (generated.length >= 6) {
-        await setCachedData(cacheKey, generated);
-    } else if (generated.length === 0) {
-        const fallback = await getMoodFallback(mood, page);
-        for (const recommendation of fallback) yield recommendation;
+        if (generated.length === 0 && !options.signal?.aborted) {
+            const fallback = await getMoodFallback(mood, page, options.signal, getAIRateLimitInfo());
+            for (const recommendation of fallback) yield recommendation;
+        }
+    } finally {
+        if (generated.length >= 4 && !generated.some((item: any) => item.aiMeta?.source === 'fallback' || item.aiMeta?.source === 'rate_limited')) {
+            await setCachedData(cacheKey, generated);
+        }
     }
 }
 
-async function getMoodFallback(mood: string, page: number = 1) {
-    // Simple fallback: Search TMDB for the mood keyword
+async function getMoodFallback(mood: string, page: number = 1, signal?: AbortSignal, rateLimitInfo?: AIRateLimitInfo) {
     try {
-        // 1. Clean the query to be more TMDB-friendly
-        // Remove common words that aren't part of titles
+        if (signal?.aborted) return [];
+
         const stopWords = [
             "movies", "movie", "tv", "show", "series", "watch", "looking", "for", "recommendation",
             "films", "film", "about", "with"
@@ -403,94 +526,34 @@ async function getMoodFallback(mood: string, page: number = 1) {
         });
 
         cleanQuery = cleanQuery.trim().replace(/\s+/g, " ");
-
-        // If cleaning removed everything (e.g. "good movies"), revert to original but trimmed
         if (!cleanQuery) cleanQuery = mood;
 
-        console.log(`[Fallback] Searching TMDB for cleaned query: "${cleanQuery}" (Original: "${mood}")`);
+        console.log(`[Fallback] Searching TMDB for query: "${cleanQuery}" (Original: "${mood}")`);
 
-        const results = await movieService.searchMulti(cleanQuery, page);
+        const results = await movieService.searchMulti(cleanQuery, page, signal);
         let combined = [...results.movies, ...results.tv].slice(0, 10);
 
-        // EXTRA FALLBACK 2: If CLEANED Title Search fails, try KEYWORD DISCOVERY
-        // This handles "good vibe" -> ID: "feel good" -> Discover movies
-        if (combined.length === 0) {
-            console.log(`[Fallback] Title search 0 results. Trying Keyword Discovery for: "${cleanQuery}"`);
-
-            const noiseWords = new Set(["best", "good", "great", "older", "younger"]);
-            const words = cleanQuery.split(/\s+/).filter(word => word.length > 2 && !noiseWords.has(word));
-            const semanticQueries = new Set([cleanQuery, ...words]);
-
-            if (/love|romance|romantic/i.test(mood)) {
-                semanticQueries.add("romance");
-                semanticQueries.add("love story");
-            }
-            if (/older/i.test(mood) && /younger/i.test(mood)) {
-                semanticQueries.add("age difference");
-                semanticQueries.add("older man younger woman");
-                semanticQueries.add("older woman younger man");
-                semanticQueries.add("intergenerational relationship");
-            }
-
-            const keywordSearches = await Promise.all(
-                Array.from(semanticQueries).map(query => movieService.searchKeywords(query))
-            );
-            const uniqueKeywords = new Map<number, { id: number; name: string }>();
-            keywordSearches.flat().forEach(keyword => uniqueKeywords.set(keyword.id, keyword));
-            const keywords = Array.from(uniqueKeywords.values());
-
-            if (keywords.length > 0) {
-                const keywordIds = keywords.slice(0, 8).map(keyword => keyword.id).join("|");
-                console.log(`[Fallback] Found semantic keywords: ${keywords.slice(0, 8).map(keyword => keyword.name).join(", ")}`);
-
-                const [movieDiscovery, tvDiscovery] = await Promise.all([
-                    movieService.getDiscover({
-                        with_keywords: keywordIds,
-                        sort_by: "popularity.desc",
-                        page: page.toString(),
-                    }),
-                    tvService.getDiscover({
-                        with_keywords: keywordIds,
-                        sort_by: "popularity.desc",
-                        page: page.toString(),
-                    }),
-                ]);
-
-                combined = [
-                    ...movieDiscovery.results.slice(0, 5),
-                    ...tvDiscovery.results.slice(0, 5),
-                ];
-            } else {
-                console.log("[Fallback] No semantic keywords found.");
-            }
-        }
-
-        // EXTRA FALLBACK 3: If still nothing, try RAW query search (in case cleaning removed key parts or if it's a very specific title)
-        if (combined.length === 0 && cleanQuery !== mood.toLowerCase()) {
-            console.log(`[Fallback] Trying raw query: "${mood}"`);
-            const rawResults = await movieService.searchMulti(mood, page);
-            combined = [...rawResults.movies, ...rawResults.tv].slice(0, 10);
-        }
-
-        if (combined.length === 0) {
+        if (combined.length === 0 && !signal?.aborted) {
             console.log("[Fallback] No query matches. Using current popular titles.");
             const [popularMovies, popularTV] = await Promise.all([
-                movieService.getPopular(),
-                tvService.getPopular(),
+                movieService.getPopular(signal),
+                tvService.getPopular(signal),
             ]);
             combined = [...popularMovies.slice(0, 5), ...popularTV.slice(0, 5)];
         }
 
+        const currentRateLimit = rateLimitInfo || getAIRateLimitInfo();
+
         return combined.map(item => ({
             ...item,
-            title: (item as any).title || (item as any).name, // Handle both Movie (title) and TV (name)
+            title: (item as any).title || (item as any).name,
             media_type: item.media_type || 'movie',
-            type: item.media_type || 'movie', // Explicitly set type to match AI structure
-            relevance_score: 85, // Generic score for fallback
+            type: item.media_type || 'movie',
+            relevance_score: 85,
             aiMeta: {
                 source: 'fallback',
+                rateLimit: currentRateLimit,
                 relevance_score: 80,
-                // Return empty strings so the UI can replace them with a "Semantic Result" badge
                 reason: "",
                 why_watch: "",
                 target_audience: "",
@@ -505,15 +568,15 @@ async function getMoodFallback(mood: string, page: number = 1) {
     }
 }
 
-export async function getSemanticMoodRecommendations(mood: string, page: number = 1) {
-    return getMoodFallback(mood, page);
+export async function getSemanticMoodRecommendations(mood: string, page: number = 1, signal?: AbortSignal) {
+    return getMoodFallback(mood, page, signal);
 }
 
 export async function getMovieInsights(id: number | string, title: string, ratings: any, reviews: any[]) {
     const apiKey = getAIKey();
     if (!apiKey) return null;
 
-    const cacheKey = `movie_insights_v4_${id}`;
+    const cacheKey = makeAICacheKey("movie_insights_v4", id);
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
@@ -604,7 +667,7 @@ export async function getSimilarContent(title: string, overview: string, genres:
     const apiKey = getAIKey();
     if (!apiKey) return getSimilarFallback(title, type, tmdbId, genres);
 
-    const cacheKey = `ai_similar_v3_${type}_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const cacheKey = makeAICacheKey(`ai_similar_v3_${type}`, title);
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
@@ -668,34 +731,64 @@ export async function getSimilarContent(title: string, overview: string, genres:
     }
 }
 
-export async function* streamSimilarContent(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'tv', tmdbId?: number) {
+export async function* streamSimilarContent(
+    title: string,
+    overview: string,
+    genres: string[],
+    type: 'movie' | 'tv' = 'tv',
+    tmdbId?: number,
+    signal?: AbortSignal
+) {
     const apiKey = getAIKey();
     if (!apiKey) {
-        for (const recommendation of await getSimilarFallback(title, type, tmdbId, genres)) yield recommendation;
+        for (const recommendation of await getSimilarFallback(title, type, tmdbId, genres, signal)) yield recommendation;
         return;
     }
 
-    const cacheKey = `ai_similar_v3_${type}_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const cacheKey = makeAICacheKey(`ai_similar_v3_${type}`, title);
     const cached = await getCachedData(cacheKey);
     if (cached) {
         for (const recommendation of cached) yield recommendation;
         return;
     }
 
-    consumeAIRateLimit();
+    try {
+        consumeAIRateLimit();
+    } catch (error) {
+        if (isAIRateLimitError(error)) {
+            console.warn(`[AI] Rate limit reached. Serving fallback similar content for "${title}"`);
+            const fallback = await getSimilarFallback(title, type, tmdbId, genres, signal);
+            for (const recommendation of fallback) {
+                yield {
+                    ...recommendation,
+                    aiMeta: {
+                        ...(recommendation as any).aiMeta,
+                        source: "rate_limited",
+                        rateLimit: error.rateLimit,
+                    },
+                };
+            }
+            return;
+        }
+        throw error;
+    }
 
     const google = createGoogleGenerativeAI({ apiKey });
     const generated: unknown[] = [];
 
     try {
+        const abortSignal = signal
+            ? AbortSignal.any([AbortSignal.timeout(45_000), signal])
+            : AbortSignal.timeout(45_000);
+
         const result = streamObject({
             model: google(AI_MODEL),
             output: "array",
             schema: moodRecommendationSchema,
             temperature: 0.7,
-            maxOutputTokens: 6000,
-            abortSignal: AbortSignal.timeout(60_000),
-            prompt: `Suggest 10 movies or TV shows similar to this ${type}: "${title}".
+            maxOutputTokens: 4500,
+            abortSignal,
+            prompt: `Suggest 8 movies or TV shows similar to this ${type}: "${title}".
 Overview: ${overview}
 Genres: ${genres.slice(0, 3).join(", ")}
 Match its mood, pacing, audience, and ending vibe. Do not include "${title}". Order by relevance with scores from 0 to 100.`,
@@ -712,59 +805,57 @@ Match its mood, pacing, audience, and ending vibe. Do not include "${title}". Or
             generated.push(normalized);
             yield normalized;
         }
-
-        if (generated.length > 0) await setCachedData(cacheKey, generated);
     } catch (error) {
         console.log("AI Similar Content Stream Error:", error);
-        const fallback = await getSimilarFallback(title, type, tmdbId, genres);
-        for (const recommendation of fallback) yield recommendation;
+        if (isQuotaError(error)) {
+            markAIRateLimited();
+        }
+    } finally {
+        if (generated.length === 0 && !signal?.aborted) {
+            const fallback = await getSimilarFallback(title, type, tmdbId, genres, signal);
+            for (const recommendation of fallback) yield recommendation;
+        }
+        if (generated.length >= 4 && !generated.some((item: any) => item.aiMeta?.source === 'fallback' || item.aiMeta?.source === 'rate_limited')) {
+            await setCachedData(cacheKey, generated);
+        }
     }
 }
 
-async function getSimilarFallback(title: string, type: 'movie' | 'tv', tmdbId?: number, genres: string[] = []) {
+async function getSimilarFallback(title: string, type: 'movie' | 'tv', tmdbId?: number, genres: string[] = [], signal?: AbortSignal) {
     try {
+        if (signal?.aborted) return [];
         let results: any[] = [];
 
         // 1. Try TMDB Similar endpoint if ID is available
         if (tmdbId) {
-            if (type === 'movie') {
-                results = await movieService.getSimilar(tmdbId);
-            } else {
-                results = await tvService.getSimilar(tmdbId);
-            }
+            results = type === 'movie'
+                ? await movieService.getSimilar(tmdbId, signal)
+                : await tvService.getSimilar(tmdbId, signal);
         }
 
-        // 2. If no ID or no results, try Search/Discover
-        if (!results || results.length === 0) {
-            // Fallback to searching the title to get an ID if we don't have one, effectively "similar to name"
-            // But simpler is just to search for title assuming it might return related things or discover by genre
-            // Let's stick to Discover by Genre if available as it's better for "Similar" than searching the name
-            if (genres && genres.length > 0) {
-                // We will need genre map mapping, but we have strings.
-                // For now, let's just use Search Multi with the title which might find the item + sequels/remakes
-                // Actually, simpler: Search for the title + "similar" is not a valid query.
-                // Let's just fallback to Trending/Popular if all else fails or verify simple search
-                const searchRes = await movieService.searchMulti(title);
-                // Filter out the item itself
-                results = [...searchRes.movies, ...searchRes.tv].filter(i => (i as any).title !== title && (i as any).name !== title);
-            }
+        // 2. If no ID or no results, try Search
+        if ((!results || results.length === 0) && !signal?.aborted) {
+            const searchRes = await movieService.searchMulti(title, 1, signal);
+            results = [...searchRes.movies, ...searchRes.tv].filter(i => (i as any).title !== title && (i as any).name !== title);
         }
 
-        if (!results || results.length === 0) {
+        if ((!results || results.length === 0) && !signal?.aborted) {
             results = type === "movie"
-                ? await movieService.getPopular()
-                : await tvService.getPopular();
+                ? await movieService.getPopular(signal)
+                : await tvService.getPopular(signal);
         }
+
+        const currentRateLimit = getAIRateLimitInfo();
 
         return results.slice(0, 10).map(item => ({
             ...item,
-            title: (item as any).title || (item as any).name, // Handle both Movie (title) and TV (name)
+            title: (item as any).title || (item as any).name,
             media_type: item.media_type || type,
-            relevance_score: 80 + Math.floor(Math.random() * 10), // Random 80-90 score
+            relevance_score: 80 + Math.floor(Math.random() * 10),
             aiMeta: {
                 source: 'fallback',
+                rateLimit: currentRateLimit,
                 relevance_score: 80,
-                // Return empty strings so the UI can replace them with a "Semantic Result" badge
                 reason: "",
                 why_watch: "",
                 target_audience: "",
@@ -785,7 +876,7 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
     const apiKey = getAIKey();
     if (!apiKey) return null;
 
-    const cacheKey = `tv_ranking_v3_${showTitle.toLowerCase().replace(/\s+/g, '_')}`;
+    const cacheKey = makeAICacheKey("tv_ranking_v3", showTitle);
     const cached = await getCachedData(cacheKey);
     if (cached) return cached;
 
@@ -838,7 +929,9 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
         const parsed = await parser.parse(cleaned);
 
         const sorted = parsed.rankings.sort((a, b) => a.rank - b.rank).map(r => ({ ...r, aiMeta: { source: 'ai' } }));
-        await setCachedData(cacheKey, sorted);
+        if (sorted.length === seasons.length) {
+            await setCachedData(cacheKey, sorted);
+        }
         return sorted;
     } catch (error: any) {
         // Safe logging to avoid source map errors
@@ -848,14 +941,14 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
     }
 }
 
-export async function* streamSeasonRanking(showTitle: string, seasons: any[]) {
+export async function* streamSeasonRanking(showTitle: string, seasons: any[], signal?: AbortSignal) {
     const apiKey = getAIKey();
     if (!apiKey) {
         for (const ranking of getSeasonRankingFallback(seasons)) yield ranking;
         return;
     }
 
-    const cacheKey = `tv_ranking_v3_${showTitle.toLowerCase().replace(/\s+/g, '_')}`;
+    const cacheKey = makeAICacheKey("tv_ranking_v3", showTitle);
     const cached = await getCachedData(cacheKey);
     if (cached) {
         for (const ranking of cached) yield ranking;
@@ -877,13 +970,17 @@ export async function* streamSeasonRanking(showTitle: string, seasons: any[]) {
     ).join("\n");
 
     try {
+        const abortSignal = signal
+            ? AbortSignal.any([AbortSignal.timeout(45_000), signal])
+            : AbortSignal.timeout(45_000);
+
         const result = streamObject({
             model: google(AI_MODEL),
             output: "array",
             schema: seasonRankingSchema,
             temperature: 0.3,
-            maxOutputTokens: 6000,
-            abortSignal: AbortSignal.timeout(60_000),
+            maxOutputTokens: 4500,
+            abortSignal,
             prompt: `Rank the seasons of "${showTitle}" from best to worst.
 Seasons:
 ${seasonsInfo}
@@ -895,11 +992,18 @@ Return every season in rank order with a score, verdict, reason, audience recept
             generated.push(normalized);
             yield normalized;
         }
-
-        if (generated.length > 0) await setCachedData(cacheKey, generated);
     } catch (error) {
         console.log("AI Season Ranking Stream Error:", error);
-        for (const ranking of getSeasonRankingFallback(seasons)) yield ranking;
+        if (isQuotaError(error)) {
+            markAIRateLimited();
+        }
+        if (!signal?.aborted) {
+            for (const ranking of getSeasonRankingFallback(seasons, getAIRateLimitInfo())) yield ranking;
+        }
+    } finally {
+        if (generated.length === seasons.length && !signal?.aborted && !generated.some((item: any) => item.aiMeta?.source === 'fallback' || item.aiMeta?.source === 'rate_limited')) {
+            await setCachedData(cacheKey, generated);
+        }
     }
 }
 

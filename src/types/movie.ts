@@ -72,6 +72,13 @@ export interface MovieResponse {
     total_results: number;
 }
 
+export interface AIRateLimitInfo {
+    limit: number;
+    count: number;
+    retryAfterSeconds: number;
+    resetAt: number;
+}
+
 export interface AIRecommendation {
     title: string;
     type: "movie" | "tv";
@@ -82,7 +89,8 @@ export interface AIRecommendation {
     ending_mood: string;
     emotional_impact: string;
     critics_consensus: string;
-    source?: "ai" | "fallback";
+    source?: "ai" | "fallback" | "rate_limited";
+    rateLimit?: AIRateLimitInfo;
 }
 
 export interface MovieInsights {

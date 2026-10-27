@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Trash2, X } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import Link from "next/link";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { removeFromHistoryAction, clearHistoryAction } from "@/actions/history";
 import { useRouter } from "next/navigation";
+
+import { formatHistoryDate } from "@/lib/date";
 
 interface HistoryItem {
     id: number;
@@ -105,7 +107,7 @@ export function HistoryList({ initialItems }: HistoryListProps) {
                                             </p>
                                         ) : null}
                                         <p className="text-[10px] text-gray-300 shadow-black drop-shadow-md capitalize">
-                                            {item.media_type} • {new Date(item.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            {item.media_type} • {formatHistoryDate(item.updatedAt)}
                                         </p>
                                     </div>
 

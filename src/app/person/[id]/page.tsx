@@ -1,4 +1,5 @@
 
+import type { Metadata } from "next";
 import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { MovieBrowser } from "@/components/movie-browser";
 import { BackButton } from "@/components/back-button";
@@ -14,6 +15,36 @@ type Props = {
     params: Promise<{ id: string }>;
 };
 
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+    const { id } = await params;
+    const personId = Number(id);
+    if (!Number.isFinite(personId)) {
+        return { title: "Person Not Found | MovieFinder AI" };
+    }
+
+    try {
+        const person = await movieService.getPersonDetails(personId);
+        if (!person) return { title: "Person Not Found | MovieFinder AI" };
+
+        const title = `${person.name} | MovieFinder AI`;
+        const description = person.biography
+            ? person.biography.slice(0, 160)
+            : `View ${person.name}'s filmography and biography on MovieFinder AI.`;
+
+        return {
+            title,
+            description,
+            openGraph: {
+                title,
+                description,
+                images: person.profile_path ? [TMDB_IMAGE_URL.profile(person.profile_path)] : [],
+            },
+        };
+    } catch {
+        return { title: "MovieFinder AI" };
+    }
+}
+
 export default async function PersonPage({ params }: Props) {
     const { id } = await params;
     if (!id) return notFound();
@@ -25,12 +56,13 @@ export default async function PersonPage({ params }: Props) {
             getFavoriteActorStatusAction(parseInt(id))
         ]);
 
-        // Log view
+        // Log view without calling revalidatePath during Server Component render
         logViewAction({
             id: person.id,
             type: 'person',
             title: person.name,
-            poster_path: person.profile_path
+            poster_path: person.profile_path,
+            revalidate: false
         }).catch(e => console.error("Failed to log person view:", e));
 
         return (

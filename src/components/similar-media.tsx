@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Sparkles, Star, Quote, Heart, PlayCircle, Users, Info } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Star, Quote, Heart, PlayCircle, Users, Info } from "lucide-react";
 import Link from "next/link";
 import Image from "./ui/image";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
@@ -44,8 +44,19 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
     const [hasRun, setHasRun] = useState(false);
     const [isFallback, setIsFallback] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        return () => {
+            abortControllerRef.current?.abort();
+        };
+    }, []);
 
     async function fetchSimilar() {
+        abortControllerRef.current?.abort();
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         setHasRun(true);
         setLoading(true);
         setError(null);
@@ -57,6 +68,7 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ mode: "similar", title, overview, genres, sourceType: type, tmdbId }),
+                signal: controller.signal,
             });
 
             if (!response.ok || !response.body) throw new Error("Failed to start recommendation stream.");
@@ -110,9 +122,6 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
     function renderEmptyState() {
         return (
             <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-6 sm:p-8">
-                <div className="absolute right-0 top-0 p-5 opacity-10">
-                    <Sparkles className="h-28 w-28 text-white" />
-                </div>
                 <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                     <div className="max-w-2xl space-y-2">
                         <h3 className="text-xl font-bold text-white">Generate AI recommendations</h3>
@@ -125,9 +134,8 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                         type="button"
                         onClick={fetchSimilar}
                         disabled={loading}
-                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex shrink-0 items-center justify-center rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        <Sparkles className="h-4 w-4" />
                         {hasRun ? "Run Again" : "Run AI Recommendations"}
                     </button>
                 </div>
@@ -140,9 +148,8 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
             <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between px-1">
                     <div className="space-y-1">
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-white" />
-                            <span>AI Recommends</span>
+                        <h2 className="text-2xl font-bold text-white">
+                            AI Recommends
                         </h2>
                     </div>
                 </div>
@@ -223,10 +230,9 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
 
                                         {/* Why Matches */}
                                         <div className="space-y-1">
-                                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 uppercase tracking-wider">
-                                                <Sparkles className="h-3 w-3" />
-                                                 {isSemanticFallback ? "Related through TMDB themes" : "Why it matches your mood"}
-                                             </div>
+                                            <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">
+                                                {isSemanticFallback ? "Related through TMDB themes" : "Why it matches your mood"}
+                                            </div>
                                             {!isSemanticFallback && item.aiMeta?.reason ? (
                                                 <p className="text-sm text-gray-300 italic leading-relaxed">&quot;{item.aiMeta.reason}&quot;</p>
                                             ) : (

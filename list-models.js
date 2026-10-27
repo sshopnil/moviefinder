@@ -39,9 +39,14 @@ async function listModels() {
         const data = await response.json();
         const models = data.models || [];
         console.log("Available Models:");
+        const target = ["gemma-4-31b-it", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
         models.forEach(m => {
-            if (m.name.includes("gemini")) {
-                console.log(`- ${m.name} (${m.displayName})`);
+            const shortName = m.name.replace("models/", "");
+            if (target.includes(shortName)) {
+                console.log(`\nModel: ${shortName}`);
+                console.log(`- Display Name: ${m.displayName}`);
+                console.log(`- Input Token Limit: ${m.inputTokenLimit?.toLocaleString()}`);
+                console.log(`- Output Token Limit: ${m.outputTokenLimit?.toLocaleString()}`);
             }
         });
     } catch (error) {

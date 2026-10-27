@@ -1,6 +1,7 @@
 "use server";
 
 import connectToDatabase from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
@@ -31,6 +32,14 @@ function isDatabaseConnectionError(error: unknown) {
 }
 
 export async function signupAction(_prevState: SignupState, formData: FormData): Promise<SignupState> {
+    const clientIp = await getClientIp();
+    const rate = checkRateLimit(`signup:${clientIp}`, 6, 15 * 60 * 1000);
+    if (!rate.allowed) {
+        return {
+            error: { form: ["Too many signup attempts. Please try again later."] },
+        };
+    }
+
     const validatedFields = signupSchema.safeParse(Object.fromEntries(formData.entries()));
 
     if (!validatedFields.success) {
