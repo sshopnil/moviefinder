@@ -32,6 +32,10 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
         const handleMessage = (e: MessageEvent) => {
             if (!e.origin || !e.data) return;
 
+            const now = Date.now();
+            // Throttle before parsing JSON from high-frequency iframe messages (every 15 seconds)
+            if (now - lastUpdateRef.current <= 15000) return;
+
             // Vidsrc specific message format
             try {
                 const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
@@ -39,22 +43,19 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
                 const duration = data?.data?.duration || data?.duration;
 
                 if (typeof currentTime === 'number' && typeof duration === 'number' && duration > 0) {
-                    const now = Date.now();
-                    // Update every 15 seconds
-                    if (now - lastUpdateRef.current > 15000) {
-                        lastUpdateRef.current = now;
-                        // Log progress (minutes)
-                        logViewAction({
-                            id: tmdbId,
-                            type: mediaType,
-                            title: title,
-                            poster_path: poster_path,
-                            season,
-                            episode,
-                            progress: Math.floor(currentTime / 60),
-                            duration: Math.floor(duration / 60)
-                        });
-                    }
+                    lastUpdateRef.current = now;
+                    // Log progress (minutes) without triggering server cache revalidation storms
+                    void logViewAction({
+                        id: tmdbId,
+                        type: mediaType,
+                        title: title,
+                        poster_path: poster_path,
+                        season,
+                        episode,
+                        progress: Math.floor(currentTime / 60),
+                        duration: Math.floor(duration / 60),
+                        revalidate: false,
+                    });
                 }
             } catch {
                 // Ignore parse errors from other sources
@@ -66,6 +67,7 @@ export function PlayerModal({ url, onClose, tmdbId, mediaType, title, poster_pat
         return () => {
             window.removeEventListener("keydown", handleEsc);
             window.removeEventListener("message", handleMessage);
+            if (volumeTimeoutRef.current) clearTimeout(volumeTimeoutRef.current);
         };
     }, [onClose, tmdbId, mediaType, title, poster_path, season, episode]);
 

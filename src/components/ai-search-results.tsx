@@ -25,9 +25,15 @@ const resultCache = new Map<string, StreamState>();
 const streamRequests = new Set<string>();
 const streamListeners = new Map<string, Set<() => void>>();
 
+const MAX_CACHE_ENTRIES = 25;
+
 function getStreamState(key: string) {
     let state = resultCache.get(key);
     if (!state) {
+        if (resultCache.size >= MAX_CACHE_ENTRIES) {
+            const oldestKey = resultCache.keys().next().value;
+            if (oldestKey) resultCache.delete(oldestKey);
+        }
         state = { items: [], status: "streaming" };
         resultCache.set(key, state);
     }

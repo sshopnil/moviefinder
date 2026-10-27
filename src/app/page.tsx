@@ -29,6 +29,8 @@ export default async function Home(props: {
   const vote_average_gte = searchParams["vote_average.gte"];
   const with_original_language = searchParams.with_original_language;
   const region = searchParams.region;
+  const rawSortBy = searchParams.sort_by;
+  const sort_by = rawSortBy === "popularity_desc" ? "popularity.desc" : rawSortBy;
 
   let movies: (Movie & { aiMeta?: any })[] = [];
   let tv: (TVSeries & { aiMeta?: any })[] = [];
@@ -101,7 +103,7 @@ export default async function Home(props: {
     } catch (e) {
       console.error(e);
     }
-  } else if (type || with_genres || primary_release_year || vote_average_gte || with_original_language || region) {
+  } else if (type || with_genres || primary_release_year || vote_average_gte || with_original_language || region || sort_by) {
     isSearchOrFilter = true;
     viewTitle = "Filtered Results";
     try {
@@ -112,6 +114,7 @@ export default async function Home(props: {
           "vote_average.gte": vote_average_gte,
           with_original_language,
           region,
+          sort_by,
           page: page.toString()
         });
         movies = movieResults.results;
@@ -120,8 +123,11 @@ export default async function Home(props: {
       if (!type || type === "tv") {
         const tvResults = await tvService.getDiscover({
           with_genres,
+          first_air_date_year: primary_release_year,
           "vote_average.gte": vote_average_gte,
           with_original_language,
+          region,
+          sort_by,
           page: page.toString()
         });
         tv = tvResults.results;
@@ -170,8 +176,15 @@ export default async function Home(props: {
           title: "Popular Movies",
           items: popularMovies.slice(0, 12),
           description: "Current movie favorites",
-          viewAllLink: "/?type=movie&sort_by=popularity_desc",
+          viewAllLink: "/?type=movie&sort_by=popularity.desc",
           totalCount: popularMovies.length
+        },
+        {
+          title: "Popular TV Series",
+          items: popularTV.slice(0, 12),
+          description: "Current TV series favorites",
+          viewAllLink: "/?type=tv&sort_by=popularity.desc",
+          totalCount: popularTV.length
         }
       ];
     } catch (e) {

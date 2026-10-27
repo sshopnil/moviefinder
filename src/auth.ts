@@ -11,6 +11,7 @@ declare module "next-auth" {
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import connectToDatabase from "@/lib/db";
+import { checkRateLimit } from "@/lib/rate-limit";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -59,6 +60,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
                 const { password } = parsedCredentials.data;
                 const email = parsedCredentials.data.email.toLowerCase();
+
+                const rate = checkRateLimit(`login:${email}`, 10, 15 * 60 * 1000);
+                if (!rate.allowed) {
+                    return null;
+                }
 
                 try {
                     await connectToDatabase();

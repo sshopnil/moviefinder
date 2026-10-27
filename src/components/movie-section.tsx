@@ -43,22 +43,21 @@ export function MovieSection({ title, description, movies, viewAllLink, totalCou
                 )}
             </div>
 
-            <motion.div layout className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-                <AnimatePresence mode="popLayout">
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+                <AnimatePresence>
                     {displayedMovies.map((movie) => (
                         <motion.div
                             key={movie.id}
-                            layout
-                            initial={{ opacity: 0, scale: 0.9 }}
+                            initial={{ opacity: 0, scale: 0.96 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
+                            exit={{ opacity: 0, scale: 0.96 }}
                             transition={{ duration: 0.2 }}
                         >
                             <MovieCard movie={movie} />
                         </motion.div>
                     ))}
                 </AnimatePresence>
-            </motion.div>
+            </div>
 
             {hasMore && (
                 <div className="flex justify-center mt-8">

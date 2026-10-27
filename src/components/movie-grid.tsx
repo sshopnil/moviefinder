@@ -23,20 +23,19 @@ export function MovieGrid({ movies, title, pendingCount = 0 }: MovieGridProps) {
                 </div>
             )}
 
-            <motion.div
-                layout
+            <div
                 className={`grid gap-4 sm:gap-6 ${hasAIRecommendations
                         ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
                         : "grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
                     }`}
             >
-                <AnimatePresence mode="popLayout">
+                <AnimatePresence>
                     {movies.map((movie) => (
                         <motion.div
                             key={movie.id}
-                            initial={{ opacity: 0, scale: 0.9 }}
+                            initial={{ opacity: 0, scale: 0.96 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
+                            exit={{ opacity: 0, scale: 0.96 }}
                             transition={{ duration: 0.2 }}
                         >
                             {movie.aiMeta ? (
@@ -52,7 +51,7 @@ export function MovieGrid({ movies, title, pendingCount = 0 }: MovieGridProps) {
                         </motion.div>
                     ))}
                 </AnimatePresence>
-            </motion.div>
+            </div>
 
             {movies.length === 0 && pendingCount === 0 && (
                 <div className="text-center py-20 text-gray-500">

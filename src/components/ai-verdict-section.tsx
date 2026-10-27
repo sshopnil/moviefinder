@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getMediaVerdictAction } from "@/app/actions";
+import type { ExternalRatings } from "@/lib/omdb";
 import { AIVerdictSkeleton } from "@/components/ai-result-skeletons";
 import { showAIRateLimitToast } from "@/components/ai-rate-limit-toast";
 import { ExpandableText } from "@/components/ui/expandable-text";
@@ -32,9 +33,11 @@ interface AIVerdictSectionProps {
     id: number;
     title: string;
     releaseDate?: string;
+    initialRatings?: ExternalRatings | null;
+    initialReviews?: { content?: string }[];
 }
 
-export function AIVerdictSection({ mediaType, id, title, releaseDate }: AIVerdictSectionProps) {
+export function AIVerdictSection({ mediaType, id, title, releaseDate, initialRatings, initialReviews }: AIVerdictSectionProps) {
     const [insights, setInsights] = useState<AIVerdict | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -44,7 +47,10 @@ export function AIVerdictSection({ mediaType, id, title, releaseDate }: AIVerdic
         setError(null);
 
         try {
-            const response = await getMediaVerdictAction(mediaType, id, title, releaseDate);
+            const response = await getMediaVerdictAction(mediaType, id, title, releaseDate, {
+                ratings: initialRatings,
+                reviews: initialReviews,
+            });
 
             if (response.rateLimit) {
                 showAIRateLimitToast(response.rateLimit);

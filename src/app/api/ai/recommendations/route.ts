@@ -1,4 +1,5 @@
 import { getSemanticMoodRecommendations, streamRecommendationsFromMood, streamSeasonRanking, streamSimilarContent, isAIRateLimitError } from "@/lib/ai";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { movieService, tvService } from "@/lib/tmdb";
 import { Movie, Season, TVSeries } from "@/types/movie";
 
@@ -37,14 +38,30 @@ function selectExactTitle<T extends Movie | TVSeries>(matches: T[], requestedTit
 }
 
 export async function POST(request: Request) {
+    const clientIp = await getClientIp();
+    const ipLimit = checkRateLimit(`ai-rec:${clientIp}`, 25, 10 * 60 * 1000);
+    if (!ipLimit.allowed) {
+        return Response.json(
+            { error: "Too many AI recommendation requests. Please wait a few minutes." },
+            {
+                status: 429,
+                headers: { "Retry-After": String(ipLimit.retryAfterSeconds) },
+            }
+        );
+    }
+
     const body = await request.json() as RequestBody;
-    const mood = body.mood?.trim();
-    const title = body.title?.trim();
+    const mood = body.mood?.trim().slice(0, 250);
+    const title = body.title?.trim().slice(0, 200);
+    const overview = (body.overview || "").slice(0, 1500);
+    const genres = Array.isArray(body.genres) ? body.genres.slice(0, 10) : [];
+    const excludeTitles = Array.isArray(body.excludeTitles) ? body.excludeTitles.slice(-30) : undefined;
+    const seasons = Array.isArray(body.seasons) ? body.seasons.slice(0, 40) : undefined;
 
     const missingContext = body.mode === "similar"
         ? !title
         : body.mode === "season-ranking"
-            ? !title || !Array.isArray(body.seasons)
+            ? !title || !seasons
             : !mood;
 
     if (missingContext) {
@@ -55,15 +72,18 @@ export async function POST(request: Request) {
     const stream = new ReadableStream({
         async start(controller) {
             const send = (event: unknown) => {
+                if (request.signal.aborted) return;
                 controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
             };
             const seen = new Set<string>();
+            let usedFallback = false;
 
             send({ type: "status", message: "Finding recommendations" });
 
             try {
                 if (body.mode === "season-ranking") {
-                    for await (const ranking of streamSeasonRanking(title!, body.seasons!)) {
+                    for await (const ranking of streamSeasonRanking(title!, seasons!, request.signal)) {
+                        if (request.signal.aborted) break;
                         send({ type: "item", item: ranking });
                     }
                     send({ type: "done" });
@@ -71,21 +91,23 @@ export async function POST(request: Request) {
                 }
 
                 const recommendations = body.mode === "similar"
-                    ? streamSimilarContent(title!, body.overview || "", body.genres || [], body.sourceType || "tv", body.tmdbId)
+                    ? streamSimilarContent(title!, overview, genres, body.sourceType || "tv", body.tmdbId, request.signal)
                     : streamRecommendationsFromMood(mood!, {
                         page: body.page,
-                        excludeTitles: body.excludeTitles,
+                        excludeTitles,
                         mediaType: body.type,
                         refresh: body.refresh,
+                        signal: request.signal,
                     });
 
                 for await (const recommendation of recommendations) {
-                    if (seen.size >= 6) break;
+                    if (request.signal.aborted || seen.size >= 6) break;
 
                     try {
                         let media;
 
                         if (recommendation.aiMeta?.source === "fallback" && recommendation.id) {
+                            usedFallback = true;
                             media = recommendation;
                         } else {
                             const matches = await movieService.searchMulti(recommendation.title);
@@ -113,19 +135,21 @@ export async function POST(request: Request) {
                                 },
                             },
                         });
+
+                        if (seen.size >= 6) break;
                     } catch (error) {
                         console.error(`Failed to hydrate ${recommendation.title}:`, error);
                     }
                 }
 
-                if (seen.size === 0) {
-                    let fallbackItems;
+                if (seen.size === 0 && !request.signal.aborted) {
+                    let fallbackItems: (Movie | TVSeries)[] = [];
 
-                    if (body.mode === "similar" && body.tmdbId) {
+                    if (!usedFallback && body.mode === "similar" && body.tmdbId) {
                         fallbackItems = body.sourceType === "movie"
                             ? await movieService.getSimilar(body.tmdbId)
                             : await tvService.getSimilar(body.tmdbId);
-                    } else if (mood) {
+                    } else if (!usedFallback && mood) {
                         fallbackItems = await getSemanticMoodRecommendations(mood, body.page);
                     } else if (body.with_genres) {
                         if (body.type === "movie") {

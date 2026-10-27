@@ -30,6 +30,10 @@ export async function TVReviews({ id, title, firstAirDate }: TVReviewsProps) {
         getExternalRatings(title, year)
     ]);
 
+    const reviewSnippets = tmdbReviews.slice(0, 5).map((r: TMDBReview) => ({
+        content: r.content ? r.content.substring(0, 200) : "",
+    }));
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -37,7 +41,14 @@ export async function TVReviews({ id, title, firstAirDate }: TVReviewsProps) {
                 Reviews & Reception
             </h2>
 
-            <AIVerdictSection mediaType="tv" id={id} title={title} releaseDate={firstAirDate} />
+            <AIVerdictSection
+                mediaType="tv"
+                id={id}
+                title={title}
+                releaseDate={firstAirDate}
+                initialRatings={ratings}
+                initialReviews={reviewSnippets}
+            />
 
             {/* External Ratings (OMDb) */}
             {ratings && (

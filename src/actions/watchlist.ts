@@ -139,7 +139,9 @@ export async function getWatchlistStatusAction(movieId: number, mediaType: Watch
     if (!session?.user?.id) return { isSaved: false, isWatched: false };
 
     await connectToDatabase();
-    const existing = await Watchlist.findOne(getStatusQuery(session.user.id, movieId, mediaType));
+    const existing = await Watchlist.findOne(getStatusQuery(session.user.id, movieId, mediaType))
+        .select({ watched: 1 })
+        .lean();
 
     return {
         isSaved: !!existing,
@@ -160,7 +162,7 @@ export async function getWatchlistAction() {
 
     await connectToDatabase();
 
-    const watchlist = await Watchlist.find({ userId: session.user.id }).sort({ createdAt: -1 });
+    const watchlist = await Watchlist.find({ userId: session.user.id }).sort({ createdAt: -1 }).lean();
 
     return watchlist.map(item => {
         const isTV = item.media_type === "tv";
@@ -204,7 +206,7 @@ export async function getWatchedIdsAction() {
     const watchedItems = await Watchlist.find(
         { userId: session.user.id, watched: true },
         { movieId: 1, media_type: 1 }
-    );
+    ).lean();
 
     return watchedItems.map(item => `${item.media_type || "movie"}:${getPublicMovieId(item.movieId, item.media_type)}`);
 }
@@ -220,7 +222,7 @@ export async function getUserWatchlistAction() {
 
     await connectToDatabase();
     // Sort by most recently added
-    const watchlist = await Watchlist.find({ userId: session.user.id }).sort({ createdAt: -1 });
+    const watchlist = await Watchlist.find({ userId: session.user.id }).sort({ createdAt: -1 }).lean();
 
     // Transform to Movie-like shape if needed, strictly speaking the schema matches close enough for display
     // Transform to Movie-like shape if needed, strictly speaking the schema matches close enough for display

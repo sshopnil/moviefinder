@@ -132,11 +132,13 @@ async function invokeAI(apiKey: string, input: string, temperature: number = 0.7
 
 async function getCachedData(key: string) {
     try {
-        await withCacheTimeout(dbConnect(), AI_CACHE_DB_TIMEOUT_MS);
-        const cache = await AICache.findOne({ key });
-        if (cache) {
+        const cache = await withCacheTimeout(
+            dbConnect().then(() => AICache.findOne({ key }).lean()),
+            AI_CACHE_DB_TIMEOUT_MS
+        );
+        if (cache && typeof cache === "object" && "data" in cache) {
             console.log(`[AICache] Hit for ${key}`);
-            return cache.data;
+            return (cache as { data: any }).data;
         }
     } catch (error) {
         console.log(`[AICache] Skipping cache read for ${key}:`, error instanceof Error ? error.message : error);
@@ -157,15 +159,19 @@ async function setCachedData(key: string, data: any) {
     }
 
     try {
-        await withCacheTimeout(dbConnect(), AI_CACHE_DB_TIMEOUT_MS);
-        await AICache.findOneAndUpdate(
-            { key },
-            {
-                key,
-                data,
-                modelUsed: AI_MODEL
-            },
-            { upsert: true, new: true }
+        await withCacheTimeout(
+            dbConnect().then(() =>
+                AICache.findOneAndUpdate(
+                    { key },
+                    {
+                        key,
+                        data,
+                        modelUsed: AI_MODEL
+                    },
+                    { upsert: true, new: true }
+                ).lean()
+            ),
+            AI_CACHE_DB_TIMEOUT_MS
         );
         console.log(`[AICache] Saved ${key}`);
     } catch (error) {
@@ -315,7 +321,7 @@ export async function getRecommendationsFromMood(mood: string) {
 
 export async function* streamRecommendationsFromMood(
     mood: string,
-    options: { page?: number; excludeTitles?: string[]; mediaType?: string; refresh?: boolean } = {},
+    options: { page?: number; excludeTitles?: string[]; mediaType?: string; refresh?: boolean; signal?: AbortSignal } = {},
 ) {
     const page = Math.max(1, options.page || 1);
     const apiKey = getAIKey();
@@ -341,49 +347,58 @@ export async function* streamRecommendationsFromMood(
     const generated: unknown[] = [];
     const generatedTitles = new Set(excluded.map(title => title.toLowerCase()));
 
-    const candidateTarget = 10;
+    const candidateTarget = 8;
 
-    for (let attempt = 0; attempt < 3 && generated.length < candidateTarget; attempt++) {
-        try {
-            const requestedCount = Math.min(6, candidateTarget - generated.length);
-            const result = streamObject({
-                model: google(AI_MODEL),
-                output: "array",
-                schema: moodRecommendationSchema,
-                temperature: 0.7,
-                maxOutputTokens: 4500,
-                abortSignal: AbortSignal.timeout(30_000),
-                prompt: `Generate batch ${page} of recommendations for this mood: "${mood}".
+    try {
+        for (let attempt = 0; attempt < 2 && generated.length === 0; attempt++) {
+            if (options.signal?.aborted) break;
+            try {
+                const requestedCount = candidateTarget - generated.length;
+                const abortSignal = options.signal
+                    ? AbortSignal.any([AbortSignal.timeout(30_000), options.signal])
+                    : AbortSignal.timeout(30_000);
+
+                const result = streamObject({
+                    model: google(AI_MODEL),
+                    output: "array",
+                    schema: moodRecommendationSchema,
+                    temperature: 0.7,
+                    maxOutputTokens: 4500,
+                    abortSignal,
+                    prompt: `Generate batch ${page} of recommendations for this mood: "${mood}".
 Return exactly ${requestedCount} distinct ${mediaType} recommendations.
 Use specific, varied global titles ordered by relevance. Scores must be from 0 to 100.
 Every recommendation must be a real, released title that can be found on TMDB. Complete every text field with specific analysis; never return empty strings.
 Do not include any of these previously shown or generated titles: ${Array.from(generatedTitles).join(", ") || "none"}.`,
-            });
+                });
 
-            for await (const recommendation of result.elementStream) {
-                const titleKey = recommendation.title.toLowerCase();
-                if (generatedTitles.has(titleKey)) continue;
-                generatedTitles.add(titleKey);
+                for await (const recommendation of result.elementStream) {
+                    const titleKey = recommendation.title.toLowerCase();
+                    if (generatedTitles.has(titleKey)) continue;
+                    generatedTitles.add(titleKey);
 
-                const normalized = {
-                    ...recommendation,
-                    type: normalizeMediaType(recommendation.type),
-                    relevance_score: normalizeScore(recommendation.relevance_score),
-                    aiMeta: { source: "ai" },
-                };
-                generated.push(normalized);
-                yield normalized;
+                    const normalized = {
+                        ...recommendation,
+                        type: normalizeMediaType(recommendation.type),
+                        relevance_score: normalizeScore(recommendation.relevance_score),
+                        aiMeta: { source: "ai" },
+                    };
+                    generated.push(normalized);
+                    yield normalized;
+                }
+            } catch (error) {
+                console.log(`AI Recommendation Stream Attempt ${attempt + 1} Error:`, error);
             }
-        } catch (error) {
-            console.log(`AI Recommendation Stream Attempt ${attempt + 1} Error:`, error);
         }
-    }
 
-    if (generated.length >= 6) {
-        await setCachedData(cacheKey, generated);
-    } else if (generated.length === 0) {
-        const fallback = await getMoodFallback(mood, page);
-        for (const recommendation of fallback) yield recommendation;
+        if (generated.length === 0 && !options.signal?.aborted) {
+            const fallback = await getMoodFallback(mood, page);
+            for (const recommendation of fallback) yield recommendation;
+        }
+    } finally {
+        if (generated.length >= 4) {
+            await setCachedData(cacheKey, generated);
+        }
     }
 }
 
@@ -418,7 +433,7 @@ async function getMoodFallback(mood: string, page: number = 1) {
             console.log(`[Fallback] Title search 0 results. Trying Keyword Discovery for: "${cleanQuery}"`);
 
             const noiseWords = new Set(["best", "good", "great", "older", "younger"]);
-            const words = cleanQuery.split(/\s+/).filter(word => word.length > 2 && !noiseWords.has(word));
+            const words = cleanQuery.split(/\s+/).filter(word => word.length > 2 && !noiseWords.has(word)).slice(0, 4);
             const semanticQueries = new Set([cleanQuery, ...words]);
 
             if (/love|romance|romantic/i.test(mood)) {
@@ -427,13 +442,12 @@ async function getMoodFallback(mood: string, page: number = 1) {
             }
             if (/older/i.test(mood) && /younger/i.test(mood)) {
                 semanticQueries.add("age difference");
-                semanticQueries.add("older man younger woman");
-                semanticQueries.add("older woman younger man");
                 semanticQueries.add("intergenerational relationship");
             }
 
+            const boundedQueries = Array.from(semanticQueries).slice(0, 5);
             const keywordSearches = await Promise.all(
-                Array.from(semanticQueries).map(query => movieService.searchKeywords(query))
+                boundedQueries.map(query => movieService.searchKeywords(query))
             );
             const uniqueKeywords = new Map<number, { id: number; name: string }>();
             keywordSearches.flat().forEach(keyword => uniqueKeywords.set(keyword.id, keyword));
@@ -668,7 +682,14 @@ export async function getSimilarContent(title: string, overview: string, genres:
     }
 }
 
-export async function* streamSimilarContent(title: string, overview: string, genres: string[], type: 'movie' | 'tv' = 'tv', tmdbId?: number) {
+export async function* streamSimilarContent(
+    title: string,
+    overview: string,
+    genres: string[],
+    type: 'movie' | 'tv' = 'tv',
+    tmdbId?: number,
+    signal?: AbortSignal
+) {
     const apiKey = getAIKey();
     if (!apiKey) {
         for (const recommendation of await getSimilarFallback(title, type, tmdbId, genres)) yield recommendation;
@@ -688,14 +709,18 @@ export async function* streamSimilarContent(title: string, overview: string, gen
     const generated: unknown[] = [];
 
     try {
+        const abortSignal = signal
+            ? AbortSignal.any([AbortSignal.timeout(45_000), signal])
+            : AbortSignal.timeout(45_000);
+
         const result = streamObject({
             model: google(AI_MODEL),
             output: "array",
             schema: moodRecommendationSchema,
             temperature: 0.7,
-            maxOutputTokens: 6000,
-            abortSignal: AbortSignal.timeout(60_000),
-            prompt: `Suggest 10 movies or TV shows similar to this ${type}: "${title}".
+            maxOutputTokens: 4500,
+            abortSignal,
+            prompt: `Suggest 8 movies or TV shows similar to this ${type}: "${title}".
 Overview: ${overview}
 Genres: ${genres.slice(0, 3).join(", ")}
 Match its mood, pacing, audience, and ending vibe. Do not include "${title}". Order by relevance with scores from 0 to 100.`,
@@ -712,12 +737,16 @@ Match its mood, pacing, audience, and ending vibe. Do not include "${title}". Or
             generated.push(normalized);
             yield normalized;
         }
-
-        if (generated.length > 0) await setCachedData(cacheKey, generated);
     } catch (error) {
         console.log("AI Similar Content Stream Error:", error);
-        const fallback = await getSimilarFallback(title, type, tmdbId, genres);
-        for (const recommendation of fallback) yield recommendation;
+        if (!signal?.aborted) {
+            const fallback = await getSimilarFallback(title, type, tmdbId, genres);
+            for (const recommendation of fallback) yield recommendation;
+        }
+    } finally {
+        if (generated.length >= 4) {
+            await setCachedData(cacheKey, generated);
+        }
     }
 }
 
@@ -848,7 +877,7 @@ export async function getSeasonRanking(showTitle: string, seasons: any[]) {
     }
 }
 
-export async function* streamSeasonRanking(showTitle: string, seasons: any[]) {
+export async function* streamSeasonRanking(showTitle: string, seasons: any[], signal?: AbortSignal) {
     const apiKey = getAIKey();
     if (!apiKey) {
         for (const ranking of getSeasonRankingFallback(seasons)) yield ranking;
@@ -877,13 +906,17 @@ export async function* streamSeasonRanking(showTitle: string, seasons: any[]) {
     ).join("\n");
 
     try {
+        const abortSignal = signal
+            ? AbortSignal.any([AbortSignal.timeout(45_000), signal])
+            : AbortSignal.timeout(45_000);
+
         const result = streamObject({
             model: google(AI_MODEL),
             output: "array",
             schema: seasonRankingSchema,
             temperature: 0.3,
-            maxOutputTokens: 6000,
-            abortSignal: AbortSignal.timeout(60_000),
+            maxOutputTokens: 4500,
+            abortSignal,
             prompt: `Rank the seasons of "${showTitle}" from best to worst.
 Seasons:
 ${seasonsInfo}
@@ -895,11 +928,15 @@ Return every season in rank order with a score, verdict, reason, audience recept
             generated.push(normalized);
             yield normalized;
         }
-
-        if (generated.length > 0) await setCachedData(cacheKey, generated);
     } catch (error) {
         console.log("AI Season Ranking Stream Error:", error);
-        for (const ranking of getSeasonRankingFallback(seasons)) yield ranking;
+        if (!signal?.aborted) {
+            for (const ranking of getSeasonRankingFallback(seasons)) yield ranking;
+        }
+    } finally {
+        if (generated.length > 0) {
+            await setCachedData(cacheKey, generated);
+        }
     }
 }
 

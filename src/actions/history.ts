@@ -10,26 +10,16 @@ import { revalidatePath } from "next/cache";
 export async function logSearchAction(query: string) {
     const session = await auth();
     if (!session?.user?.id) return;
-    if (!query.trim()) return;
+    const trimmed = query.trim();
+    if (!trimmed) return;
 
     await connectToDatabase();
 
-    // Deduplicate: If same query was searched recently, just update timestamp? 
-    // For simplicity, just create new entry or update if recent. 
-    // Let's just create new one for now, or update if very recent?
-    // Let's just insert. A robust system might upsert today's searches.
-
-    // Check if the query exists for user to update timestamp instead of spamming DB with same query
-    const existing = await SearchHistory.findOne({ userId: session.user.id, query: query });
-    if (existing) {
-        existing.touch(); // Update updatedAt
-        await existing.save();
-    } else {
-        await SearchHistory.create({
-            userId: session.user.id,
-            query: query
-        });
-    }
+    await SearchHistory.findOneAndUpdate(
+        { userId: session.user.id, query: trimmed },
+        { $set: { updatedAt: new Date() } },
+        { upsert: true }
+    );
 }
 
 export async function logViewAction(item: {
@@ -40,23 +30,24 @@ export async function logViewAction(item: {
     season?: number,
     episode?: number,
     progress?: number,
-    duration?: number
+    duration?: number,
+    revalidate?: boolean
 }) {
     const session = await auth();
     if (!session?.user?.id) return;
 
     await connectToDatabase();
 
-    const updateFields: any = {
+    const setFields: Record<string, unknown> = {
         title: item.title,
         poster_path: item.poster_path,
         season: item.season,
         episode: item.episode,
-        $set: { updatedAt: new Date() }
+        updatedAt: new Date()
     };
 
-    if (item.progress !== undefined) updateFields.progress = item.progress;
-    if (item.duration !== undefined) updateFields.duration = item.duration;
+    if (item.progress !== undefined) setFields.progress = item.progress;
+    if (item.duration !== undefined) setFields.duration = item.duration;
 
     await RecentlyViewed.findOneAndUpdate(
         {
@@ -64,16 +55,15 @@ export async function logViewAction(item: {
             itemId: item.id,
             itemType: item.type
         },
-        updateFields,
+        { $set: setFields },
         { upsert: true, new: true }
     );
 
-    // revalidatePath only needs to happen if we want immediate UI updates. 
-    // For progress updates (every few seconds), we probably don't want to revalidate continuously.
-    // Maybe only on initial play or significant changes?
-    // We'll leave it for now but might need to optimize if it causes lag.
-    revalidatePath("/dashboard");
-    revalidatePath("/history");
+    const shouldRevalidate = item.revalidate ?? (item.progress === undefined || item.progress === 0);
+    if (shouldRevalidate) {
+        revalidatePath("/dashboard");
+        revalidatePath("/history");
+    }
 }
 
 export async function removeFromHistoryAction(itemId: number, itemType: string) {
@@ -102,7 +92,8 @@ export async function getRecentSearchesAction(limit = 10) {
 
     const history = await SearchHistory.find({ userId: session.user.id })
         .sort({ updatedAt: -1 }) // Most recent updated (searched)
-        .limit(limit);
+        .limit(limit)
+        .lean();
 
     return history.map(h => ({ query: h.query, date: h.updatedAt }));
 }
@@ -115,7 +106,8 @@ export async function getRecentlyViewedAction(limit = 10) {
 
     const history = await RecentlyViewed.find({ userId: session.user.id })
         .sort({ updatedAt: -1 })
-        .limit(limit);
+        .limit(limit)
+        .lean();
 
     // Normalize for MovieBrowser/PersonBrowser if possible
     return history.map(h => ({

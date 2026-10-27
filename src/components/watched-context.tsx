@@ -1,12 +1,13 @@
 "use client";
 
-import { createContext, useContext, useState, useOptimistic, useTransition, ReactNode, useEffect } from "react";
+import { createContext, useContext, useState, useOptimistic, useTransition, ReactNode, useEffect, useCallback, useMemo } from "react";
 import { toggleWatchedAction } from "@/actions/watchlist";
 import { Movie } from "@/types/movie";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 interface WatchedContextType {
+    isAuthenticated: boolean;
     isWatched: (movie: WatchedMovie) => boolean;
     toggleWatched: (movie: WatchedMovie) => Promise<void>;
 }
@@ -72,9 +73,12 @@ export function WatchedProvider({ children, initialWatchedIds = [] }: WatchedPro
         }
     );
 
-    const isWatched = (movie: WatchedMovie) => optimisticWatchedIds.has(getWatchedKey(movie));
+    const isWatched = useCallback(
+        (movie: WatchedMovie) => optimisticWatchedIds.has(getWatchedKey(movie)),
+        [optimisticWatchedIds]
+    );
 
-    const toggleWatched = async (movie: WatchedMovie) => {
+    const toggleWatched = useCallback(async (movie: WatchedMovie) => {
         if (!session) {
             router.push("/login?callbackUrl=" + window.location.pathname);
             return;
@@ -114,10 +118,19 @@ export function WatchedProvider({ children, initialWatchedIds = [] }: WatchedPro
                 console.error(error);
             }
         });
-    };
+    }, [session, router, setOptimisticWatchedIds]);
+
+    const contextValue = useMemo(
+        () => ({
+            isAuthenticated: status === "authenticated",
+            isWatched,
+            toggleWatched,
+        }),
+        [status, isWatched, toggleWatched]
+    );
 
     return (
-        <WatchedContext.Provider value={{ isWatched, toggleWatched }}>
+        <WatchedContext.Provider value={contextValue}>
             {children}
         </WatchedContext.Provider>
     );

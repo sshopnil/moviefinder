@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { tvService, movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BackButton } from "@/components/back-button";
 import { Calendar, Clock, Star, Tv, Sparkles } from "lucide-react";
@@ -19,6 +20,35 @@ type Props = {
     params: Promise<{ id: string }>;
     searchParams: Promise<{ season?: string; episode?: string }>;
 };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+    const { id } = await params;
+    const tvId = Number(id);
+    if (!Number.isFinite(tvId)) {
+        return { title: "TV Series Not Found | MovieFinder AI" };
+    }
+
+    try {
+        const tv = await tvService.getTVDetails(tvId);
+        if (!tv) return { title: "TV Series Not Found | MovieFinder AI" };
+
+        const firstAirYear = tv.first_air_date ? ` (${tv.first_air_date.slice(0, 4)})` : "";
+        const title = `${tv.name}${firstAirYear} | MovieFinder AI`;
+        const description = tv.overview || `Discover ${tv.name} on MovieFinder AI.`;
+
+        return {
+            title,
+            description,
+            openGraph: {
+                title,
+                description,
+                images: tv.backdrop_path ? [TMDB_IMAGE_URL.backdrop(tv.backdrop_path)] : [],
+            },
+        };
+    } catch {
+        return { title: "MovieFinder AI" };
+    }
+}
 
 export default async function TVPage({ params, searchParams }: Props) {
     const { id } = await params;

@@ -63,7 +63,7 @@ export async function getFavoriteActorsAction() {
 
     await connectToDatabase();
 
-    const favorites = await FavoriteActor.find({ userId: session.user.id }).sort({ createdAt: -1 });
+    const favorites = await FavoriteActor.find({ userId: session.user.id }).sort({ createdAt: -1 }).lean();
 
     return favorites.map(f => ({
         id: f.actorId,
@@ -88,7 +88,7 @@ export async function getFavoriteActorStatusAction(actorId: number) {
     const existing = await FavoriteActor.findOne({
         userId: session.user.id,
         actorId: actorId,
-    });
+    }).select({ _id: 1 }).lean();
 
     return !!existing;
 }

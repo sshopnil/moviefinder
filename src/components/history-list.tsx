@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Trash2, X } from "lucide-react";
-import Image from "next/image";
+import Image from "@/components/ui/image";
 import Link from "next/link";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { removeFromHistoryAction, clearHistoryAction } from "@/actions/history";

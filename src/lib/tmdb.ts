@@ -6,9 +6,9 @@ import { Movie, MovieDetails, MovieResponse, TVSeries, TVDetails } from "@/types
 
 export const TMDB_IMAGE_URL = {
     poster: (path: string | null) => path ? `${IMAGE_BASE_URL}/w500${path}` : "/placeholder-poster.png",
-    backdrop: (path: string | null) => path ? `${IMAGE_BASE_URL}/original${path}` : "/placeholder-backdrop.png",
+    backdrop: (path: string | null) => path ? `${IMAGE_BASE_URL}/w1280${path}` : "/placeholder-backdrop.png",
     profile: (path: string | null) => path ? `${IMAGE_BASE_URL}/h632${path}` : "/placeholder-profile.png",
-    logo: (path: string | null) => path ? `${IMAGE_BASE_URL}/original${path}` : "/placeholder-icon.png",
+    logo: (path: string | null) => path ? `${IMAGE_BASE_URL}/w154${path}` : "/placeholder-icon.png",
 };
 
 async function fetchFromTMDB<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
@@ -32,6 +32,7 @@ async function fetchFromTMDB<T>(endpoint: string, params: Record<string, string>
         headers: {
             "Content-Type": "application/json",
         },
+        signal: AbortSignal.timeout(8000),
         next: { revalidate: 3600 }, // Cache for 1 hour
     });
 

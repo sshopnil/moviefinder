@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { movieService, tvService, TMDB_IMAGE_URL } from "@/lib/tmdb";
 import { BackButton } from "@/components/back-button";
 import { ArrowLeft, Calendar, Clock, Star } from "lucide-react";
@@ -21,6 +22,35 @@ import { SourceRecommendations } from "@/components/source-recommendations";
 type Props = {
     params: Promise<{ id: string }>;
 };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+    const { id } = await params;
+    const movieId = Number(id);
+    if (!Number.isFinite(movieId)) {
+        return { title: "Movie Not Found | MovieFinder AI" };
+    }
+
+    try {
+        const movie = await movieService.getMovieDetails(movieId);
+        if (!movie) return { title: "Movie Not Found | MovieFinder AI" };
+
+        const releaseYear = movie.release_date ? ` (${movie.release_date.slice(0, 4)})` : "";
+        const title = `${movie.title}${releaseYear} | MovieFinder AI`;
+        const description = movie.overview || `Discover ${movie.title} on MovieFinder AI.`;
+
+        return {
+            title,
+            description,
+            openGraph: {
+                title,
+                description,
+                images: movie.backdrop_path ? [TMDB_IMAGE_URL.backdrop(movie.backdrop_path)] : [],
+            },
+        };
+    } catch {
+        return { title: "MovieFinder AI" };
+    }
+}
 
 export default async function MoviePage({ params }: Props) {
     const { id } = await params;

@@ -1,6 +1,7 @@
 'use server';
 
 import connectToDatabase from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import User from "@/models/User";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
@@ -103,7 +104,7 @@ export async function updateUserPassword(prevState: any, formData: FormData) {
         }
 
         await connectToDatabase();
-        const user = await User.findOne({ email: session.user.email });
+        const user = await User.findOne({ email: session.user.email.trim().toLowerCase() });
 
         if (!user) {
             return { error: "User not found" };
@@ -136,7 +137,14 @@ export async function updateUserPassword(prevState: any, formData: FormData) {
 
 export async function forgotPassword(prevState: any, formData: FormData) {
     try {
-        const email = formData.get("email") as string;
+        const clientIp = await getClientIp();
+        const rate = checkRateLimit(`forgot-pwd:${clientIp}`, 5, 15 * 60 * 1000);
+        if (!rate.allowed) {
+            return { error: "Too many reset requests. Please try again in a few minutes." };
+        }
+
+        const rawEmail = formData.get("email") as string;
+        const email = rawEmail?.trim().toLowerCase();
 
         if (!email) {
             return { error: "Email is required" };
@@ -163,14 +171,32 @@ export async function forgotPassword(prevState: any, formData: FormData) {
         user.resetPasswordExpire = resetPasswordExpire;
         await user.save();
 
-        // MOCK EMAIL SENDING
         const resetUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/reset-password?userId=${user._id}&token=${resetToken}`;
-        const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PUT request to: \n\n ${resetUrl}`;
+        const message = `You requested a password reset for MovieFinder. Click the link below to reset your password (valid for 10 minutes):\n\n${resetUrl}`;
 
-        console.log("------------------------------------------");
-        console.log("MOCK EMAIL SENT TO:", email);
-        console.log("RESET LINK:", resetUrl);
-        console.log("------------------------------------------");
+        if (process.env.RESEND_API_KEY) {
+            await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    from: process.env.EMAIL_FROM || "MovieFinder <onboarding@resend.dev>",
+                    to: [email],
+                    subject: "Reset your MovieFinder password",
+                    text: message,
+                }),
+                signal: AbortSignal.timeout(8000),
+            });
+        } else if (process.env.NODE_ENV !== "production") {
+            console.log("------------------------------------------");
+            console.log("DEV PASSWORD RESET EMAIL FOR:", email);
+            console.log("RESET LINK:", resetUrl);
+            console.log("------------------------------------------");
+        } else {
+            console.warn("Password reset requested, but RESEND_API_KEY is not configured.");
+        }
 
         return { success: "If an account exists, a reset link has been sent." };
 
@@ -190,6 +216,12 @@ const ResetPasswordSchema = z.object({
 
 export async function resetPassword(prevState: any, formData: FormData) {
     try {
+        const clientIp = await getClientIp();
+        const rate = checkRateLimit(`reset-pwd:${clientIp}`, 5, 15 * 60 * 1000);
+        if (!rate.allowed) {
+            return { error: "Too many attempts. Please try again later." };
+        }
+
         const password = formData.get("password") as string;
         const confirmPassword = formData.get("confirmPassword") as string;
         const userId = formData.get("userId") as string;
