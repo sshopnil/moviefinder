@@ -19,14 +19,6 @@ const AI_CACHE_DB_TIMEOUT_MS = Number(process.env.AI_CACHE_DB_TIMEOUT_MS) || 500
 
 export const STOP_WORDS_REGEX = /\b(movies?|tv|shows?|series|watch|looking|for|recommendations?|films?|about|with)\b/gi;
 
-const GOOGLE_ZERO_THINKING_OPTIONS = {
-    google: {
-        thinkingConfig: {
-            thinkingBudget: 0,
-        },
-    },
-};
-
 const moodRecommendationSchema = z.object({
     title: z.string().trim().min(1),
     type: z.string().trim().min(1),
@@ -390,7 +382,6 @@ export async function getRecommendationsFromMood(mood: string) {
             model: google(AI_MODEL),
             schema: recommendationSchema,
             temperature: 0.7,
-            providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
             prompt: `Suggest 10 movies/TV shows for mood: "${mood}".
 CRITICAL:
 1. Specific, not generic.
@@ -482,7 +473,6 @@ export async function* streamRecommendationsFromMood(
                     temperature: 0.7,
                     maxOutputTokens: 4500,
                     abortSignal,
-                    providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
                     prompt: `Generate batch ${page} of recommendations for this mood: "${mood}".
 Return exactly ${requestedCount} distinct ${mediaType} recommendations.
 Use specific, varied global titles ordered by relevance. Scores must be from 0 to 100.
@@ -616,7 +606,6 @@ export async function getMovieInsights(id: number | string, title: string, ratin
             model: google(AI_MODEL),
             schema: insightsSchema,
             temperature: 0.7,
-            providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
             prompt: `Analyze "${title}".\nRatings: ${ratingsSummary}\nReviews: ${reviewsSummary}\nAct as a witty friend. Provide verdict, reason, audience fit, feeling, ending vibe, and critics consensus.`,
         });
 
@@ -782,7 +771,6 @@ export async function* streamSimilarContent(
             temperature: 0.7,
             maxOutputTokens: 4500,
             abortSignal,
-            providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
             prompt: `Suggest 8 movies or TV shows similar to this ${type}: "${title}".
 Overview: ${overview}
 Genres: ${genres.slice(0, 3).join(", ")}
@@ -976,7 +964,6 @@ export async function* streamSeasonRanking(showTitle: string, seasons: any[], si
             temperature: 0.3,
             maxOutputTokens: 4500,
             abortSignal,
-            providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
             prompt: `Rank the seasons of "${showTitle}" from best to worst.
 Seasons:
 ${seasonsInfo}
