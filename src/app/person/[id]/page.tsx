@@ -7,9 +7,7 @@ import { MapPin, Calendar, Star, Instagram } from "lucide-react";
 import Image from "@/components/ui/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getFavoriteActorStatusAction } from "@/actions/favorite-actors";
 import { FavoriteActorButton } from "@/components/favorite-actor-button";
-import { logViewAction } from "@/actions/history";
 
 export const revalidate = 86400;
 
@@ -52,20 +50,10 @@ export default async function PersonPage({ params }: Props) {
     if (!id) return notFound();
 
     try {
-        const [person, credits, isFavorite] = await Promise.all([
+        const [person, credits] = await Promise.all([
             movieService.getPersonDetails(parseInt(id)),
             movieService.getPersonCredits(parseInt(id)),
-            getFavoriteActorStatusAction(parseInt(id))
         ]);
-
-        // Log view without calling revalidatePath during Server Component render
-        logViewAction({
-            id: person.id,
-            type: 'person',
-            title: person.name,
-            poster_path: person.profile_path,
-            revalidate: false
-        }).catch(e => console.error("Failed to log person view:", e));
 
         return (
             <div className="min-h-screen relative pb-20">
@@ -102,7 +90,7 @@ export default async function PersonPage({ params }: Props) {
                                             profile_path: person.profile_path,
                                             known_for_department: person.known_for_department
                                         }}
-                                        isFavoriteInitial={isFavorite}
+                                        isFavoriteInitial={false}
                                     />
                                 </div>
 

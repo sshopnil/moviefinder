@@ -5,9 +5,7 @@ import { Calendar, Clock, Star, Tv } from "lucide-react";
 import Image from "@/components/ui/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
-import { getWatchlistStatusAction } from "@/actions/watchlist";
 import { Suspense } from "react";
 import { TVReviews } from "@/components/tv-reviews";
 import { SimilarMedia } from "@/components/similar-media";
@@ -61,23 +59,11 @@ export default async function TVPage({ params, searchParams }: Props) {
     if (!Number.isFinite(tvId)) return notFound();
 
     let tv;
-    let savedStatus = false;
-    let watchedStatus = false;
 
     try {
         tv = await tvService.getTVDetails(tvId);
 
         if (!tv) return notFound();
-
-        // Log view
-        // Log view removed to prevent revalidatePath error during render.
-        // History is now tracked via WatchProviders when user plays content.
-
-        const status = await getWatchlistStatusAction(tvId, "tv");
-        if (status) {
-            savedStatus = status.isSaved;
-            watchedStatus = status.isWatched;
-        }
     } catch (e: any) {
         if (e && typeof e === 'object' && 'digest' in e && typeof e.digest === 'string' && (e.digest.startsWith('NEXT_REDIRECT') || e.digest.startsWith('NEXT_NOT_FOUND'))) {
             throw e;
@@ -142,7 +128,7 @@ export default async function TVPage({ params, searchParams }: Props) {
                             {tv.tagline && <p className="text-lg md:text-xl text-gray-400 italic leading-snug">{tv.tagline}</p>}
                         </div>
 
-                        <MovieActions movie={tv as any} isSaved={savedStatus} isWatched={watchedStatus} />
+                        <MovieActions movie={tv as any} isSaved={false} isWatched={false} />
 
                         <div className="flex flex-wrap gap-2 sm:gap-4 text-xs sm:text-sm text-gray-300">
                             <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">

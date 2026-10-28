@@ -16,10 +16,34 @@ interface MovieActionsProps {
 }
 
 export function MovieActions({ movie, isSaved, isWatched }: MovieActionsProps) {
+    const { status } = useSession();
     const [showTrailer, setShowTrailer] = useState(false);
+    const [saved, setSaved] = useState(isSaved);
+    const [watched, setWatched] = useState(isWatched);
     const isTV = 'name' in movie;
     const title = isTV ? (movie as any).name : (movie as any).title;
     const releaseDate = isTV ? (movie as any).first_air_date : (movie as any).release_date;
+
+    useEffect(() => {
+        if (status !== "authenticated") return;
+        let isMounted = true;
+
+        async function fetchStatus() {
+            try {
+                const { getWatchlistStatusAction } = await import("@/actions/watchlist");
+                const res = await getWatchlistStatusAction(movie.id, isTV ? "tv" : "movie");
+                if (isMounted && res) {
+                    setSaved(res.isSaved);
+                    setWatched(res.isWatched);
+                }
+            } catch (err) {
+                console.error("Failed to fetch watchlist status:", err);
+            }
+        }
+
+        fetchStatus();
+        return () => { isMounted = false; };
+    }, [movie.id, isTV, status]);
 
     const trailerKey = movie.videos?.results?.find(v => v.type === "Trailer" && v.site === "YouTube")?.key;
 
@@ -44,9 +68,9 @@ export function MovieActions({ movie, isSaved, isWatched }: MovieActionsProps) {
                     </button>
                 )}
 
-                <WatchlistButton movie={movieWithUnifiedFields as any} initialIsSaved={isSaved} />
+                <WatchlistButton movie={movieWithUnifiedFields as any} initialIsSaved={saved} />
 
-                <WatchedButton movie={movieWithUnifiedFields as any} initialIsWatched={isWatched} />
+                <WatchedButton movie={movieWithUnifiedFields as any} initialIsWatched={watched} />
             </div>
 
             {trailerKey && showTrailer && (

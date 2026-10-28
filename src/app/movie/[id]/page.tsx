@@ -5,9 +5,7 @@ import { ArrowLeft, Calendar, Clock, Star } from "lucide-react";
 import Image from "@/components/ui/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { logViewAction } from "@/actions/history";
 import { MovieActions } from "@/components/movie-actions";
-import { getWatchlistStatusAction } from "@/actions/watchlist";
 import { Suspense } from "react";
 import { MediaGalleryLoader } from "@/components/media-gallery-loader";
 import { MediaGallerySkeleton } from "@/components/media-gallery-skeleton";
@@ -63,23 +61,10 @@ export default async function MoviePage({ params }: Props) {
 
     let movie;
 
-    let savedStatus = false;
-    let watchedStatus = false;
-
     try {
         movie = await movieService.getMovieDetails(movieId);
 
         if (!movie) return notFound();
-
-        // Log view
-        // Log view removed to prevent revalidatePath error during render.
-        // History is now tracked via WatchProviders when user plays content.
-
-        const status = await getWatchlistStatusAction(movieId, "movie");
-        if (status) {
-            savedStatus = status.isSaved;
-            watchedStatus = status.isWatched;
-        }
     } catch (e: any) {
         if (e && typeof e === 'object' && 'digest' in e && typeof e.digest === 'string' && (e.digest.startsWith('NEXT_REDIRECT') || e.digest.startsWith('NEXT_NOT_FOUND'))) {
             throw e;
@@ -144,7 +129,7 @@ export default async function MoviePage({ params }: Props) {
                             <p className="text-lg md:text-xl text-gray-400 italic leading-snug">{movie.tagline}</p>
                         </div>
 
-                        <MovieActions movie={movie} isSaved={savedStatus} isWatched={watchedStatus} />
+                        <MovieActions movie={movie} isSaved={false} isWatched={false} />
 
                         <div className="flex flex-wrap gap-2 sm:gap-4 text-xs sm:text-sm text-gray-300">
                             <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">

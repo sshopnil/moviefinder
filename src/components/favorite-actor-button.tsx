@@ -1,9 +1,10 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Heart } from "lucide-react";
 import { toggleFavoriteActorAction } from "@/actions/favorite-actors";
+import { useSession } from "next-auth/react";
 
 interface FavoriteActorButtonProps {
     actor: {
@@ -16,8 +17,29 @@ interface FavoriteActorButtonProps {
 }
 
 export function FavoriteActorButton({ actor, isFavoriteInitial }: FavoriteActorButtonProps) {
+    const { status } = useSession();
     const [isFavorite, setIsFavorite] = useState(isFavoriteInitial);
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        if (status !== "authenticated") return;
+        let isMounted = true;
+
+        async function fetchStatus() {
+            try {
+                const { getFavoriteActorStatusAction } = await import("@/actions/favorite-actors");
+                const res = await getFavoriteActorStatusAction(actor.id);
+                if (isMounted) {
+                    setIsFavorite(res);
+                }
+            } catch (err) {
+                console.error("Failed to fetch favorite actor status:", err);
+            }
+        }
+
+        fetchStatus();
+        return () => { isMounted = false; };
+    }, [actor.id, status]);
 
     const handleToggle = async () => {
         if (isLoading) return;
