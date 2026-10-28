@@ -16,6 +16,8 @@ import { WatchProviders } from "@/components/watch-providers";
 import { SourceRecommendations } from "@/components/source-recommendations";
 import { SeasonRankingSection } from "@/components/season-ranking-section";
 
+export const revalidate = 86400;
+
 type Props = {
     params: Promise<{ id: string }>;
     searchParams: Promise<{ season?: string; episode?: string }>;
@@ -237,7 +239,7 @@ export default async function TVPage({ params, searchParams }: Props) {
                             <h3 className="text-lg font-semibold text-white">Top Cast</h3>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                                 {tv.cast.map((actor: any) => (
-                                    <Link key={actor.id} href={`/person/${actor.id}`} className="text-center group block">
+                                    <Link key={actor.id} href={`/person/${actor.id}`} prefetch={false} className="text-center group block">
                                         <div className="relative w-full aspect-square rounded-full overflow-hidden mb-2 mx-auto max-w-[100px] bg-white/5 group-hover:ring-2 ring-white/20 transition-all">
                                             {actor.profile_path ? (
                                                 <Image

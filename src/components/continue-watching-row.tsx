@@ -31,7 +31,7 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                 <h2 className="text-xl sm:text-2xl font-bold text-white">Continue Watching</h2>
-                <Link href="/history" className="text-sm text-blue-400 hover:underline">
+                <Link href="/history" prefetch={false} className="text-sm text-blue-400 hover:underline">
                     View All History
                 </Link>
             </div>
@@ -47,6 +47,7 @@ export function ContinueWatchingRow({ items }: ContinueWatchingRowProps) {
                             ? `/tv/${item.id}?season=${item.season}&episode=${item.episode}`
                             : `/${item.media_type}/${item.id}`
                         }
+                        prefetch={false}
                         className="relative min-w-[200px] aspect-[16/9] rounded-xl overflow-hidden group snap-start border border-white/5 bg-white/5"
                     >
                         {item.poster_path ? (

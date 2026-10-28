@@ -182,6 +182,7 @@ export function SimilarMedia({ title, overview, genres, type, tmdbId }: SimilarM
                             <Link
                                 key={item.id}
                                 href={`/${itemPath}/${item.id}`}
+                                prefetch={false}
                                 className="group block relative h-full hover:scale-[1.01] transition-transform duration-300"
                                 style={{ animationDelay: `${idx * 100}ms` }}
                             >

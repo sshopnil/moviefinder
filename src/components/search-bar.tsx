@@ -271,6 +271,7 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                         <Link
                             key={`${item.media_type}-${item.id}`}
                             href={`/${item.media_type}/${item.id}`}
+                            prefetch={false}
                             className="flex items-center gap-4 px-4 py-3 hover:bg-white/5 transition-colors group text-left"
                             onClick={() => setShowSuggestions(false)}
                         >

@@ -17,7 +17,7 @@ export function MovieCard({ movie }: MovieCardProps) {
     const href = isTV ? `/tv/${movie.id}` : `/movie/${movie.id}`;
 
     return (
-        <Link href={href} className="block w-full min-w-0">
+        <Link href={href} prefetch={false} className="block w-full min-w-0">
             <div
                 className="group relative h-[260px] xs:h-[280px] sm:h-[400px] w-full cursor-pointer overflow-hidden rounded-xl bg-black/20 ring-1 ring-white/5 transition-all hover:ring-white/20"
             >

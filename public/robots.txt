@@ -1,0 +1,26 @@
+User-agent: *
+Allow: /
+Allow: /movie/
+Allow: /tv/
+Allow: /person/
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /watchlist
+Disallow: /history
+Disallow: /favorites
+Disallow: /settings
+Disallow: /*?*q=
+Disallow: /*?*mood=
+Disallow: /*?*page=
+Disallow: /*?*type=
+Disallow: /*?*sort_by=
+
+# Block aggressive crawlers and scraper bots that exhaust serverless limits
+User-agent: Bytespider
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /

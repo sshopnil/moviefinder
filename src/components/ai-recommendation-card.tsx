@@ -51,7 +51,7 @@ export function AIRecommendationCard({ movie }: AIRecommendationCardProps) {
                     <h3 className="text-lg font-bold text-white line-clamp-1">{title}</h3>
                 </div>
 
-                <Link href={href} className="absolute inset-0 z-10">
+                <Link href={href} prefetch={false} className="absolute inset-0 z-10">
                     <span className="sr-only">View Details</span>
                 </Link>
             </div>
@@ -139,7 +139,7 @@ export function AIRecommendationCard({ movie }: AIRecommendationCardProps) {
             {/* Action Bar */}
             <div className="px-4 py-2 bg-white/[0.02] border-t border-white/5 flex justify-between items-center">
                 <span className="text-[10px] text-gray-500">{date ? new Date(date).getFullYear() : 'N/A'}</span>
-                <Link href={href} className="text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors flex items-center gap-1">
+                <Link href={href} prefetch={false} className="text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest transition-colors flex items-center gap-1">
                     Details <PlayCircle className="h-3 w-3" />
                 </Link>
             </div>

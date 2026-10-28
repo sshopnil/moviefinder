@@ -14,6 +14,8 @@ import { Pagination } from "@/components/pagination";
 import { AISearchResults } from "@/components/ai-search-results";
 import { matchesGenreFilter, getGenreIdForDiscover } from "@/lib/genres";
 
+export const revalidate = 3600;
+
 // Server Component
 export default async function Home(props: {
   searchParams: Promise<{ [key: string]: string | undefined }>;
@@ -209,7 +211,7 @@ export default async function Home(props: {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-white pl-2 border-l-4 border-blue-500">People</h2>
               {people.length > 5 && (
-                <Link href={`/search/people?q=${encodeURIComponent(query as string)}`} className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                <Link href={`/search/people?q=${encodeURIComponent(query as string)}`} prefetch={false} className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
                   View All People ({people.length})
                 </Link>
               )}

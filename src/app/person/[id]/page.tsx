@@ -11,6 +11,8 @@ import { getFavoriteActorStatusAction } from "@/actions/favorite-actors";
 import { FavoriteActorButton } from "@/components/favorite-actor-button";
 import { logViewAction } from "@/actions/history";
 
+export const revalidate = 86400;
+
 type Props = {
     params: Promise<{ id: string }>;
 };

@@ -118,6 +118,7 @@ export function HeaderSearchIcon() {
                                 <Link
                                     key={`${item.media_type}-${item.id}`}
                                     href={`/${item.media_type}/${item.id}`}
+                                    prefetch={false}
                                     className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 transition-colors group"
                                     onClick={() => {
                                         setExpanded(false);

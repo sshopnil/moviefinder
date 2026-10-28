@@ -36,7 +36,7 @@ export function MovieSection({ title, description, movies, viewAllLink, totalCou
                     {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
                 </div>
                 {viewAllLink && (
-                    <Link href={viewAllLink} className="text-sm text-blue-400 hover:text-blue-300 transition-colors mb-1">
+                    <Link href={viewAllLink} prefetch={false} className="text-sm text-blue-400 hover:text-blue-300 transition-colors mb-1">
                         View All
                         {totalCount ? ` (${totalCount})` : " >"}
                     </Link>

@@ -15,7 +15,7 @@ interface PersonCardProps {
 
 export function PersonCard({ person }: PersonCardProps) {
     return (
-        <Link href={`/person/${person.id}`} className="group block bg-white/5 rounded-xl p-3 hover:bg-white/10 transition-colors">
+        <Link href={`/person/${person.id}`} prefetch={false} className="group block bg-white/5 rounded-xl p-3 hover:bg-white/10 transition-colors">
             <div className="relative aspect-square rounded-full overflow-hidden mb-3 mx-auto max-w-[120px] bg-black/20 group-hover:ring-2 ring-blue-500/50 transition-all">
                 {person.profile_path ? (
                     <Image

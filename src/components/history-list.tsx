@@ -53,7 +53,7 @@ export function HistoryList({ initialItems }: HistoryListProps) {
                 <p className="text-gray-400 max-w-sm">
                     Items you watch will appear here. Go watch something!
                 </p>
-                <Link href="/" className="px-6 py-2 bg-white text-black rounded-lg font-bold hover:bg-gray-200 transition-colors">
+                <Link href="/" prefetch={false} className="px-6 py-2 bg-white text-black rounded-lg font-bold hover:bg-gray-200 transition-colors">
                     Browse Movies
                 </Link>
             </div>
@@ -77,6 +77,7 @@ export function HistoryList({ initialItems }: HistoryListProps) {
                     <div key={`${item.media_type}-${item.id}`} className="relative group">
                         <Link
                             href={`/${item.media_type}/${item.id}`}
+                            prefetch={false}
                             className="block aspect-[2/3] relative rounded-xl overflow-hidden bg-white/5 border border-white/5 transition-transform duration-300 group-hover:scale-[1.02]"
                         >
                             {item.poster_path ? (
