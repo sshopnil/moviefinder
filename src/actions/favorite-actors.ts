@@ -64,7 +64,7 @@ export async function toggleFavoriteActorAction(actor: ActorData) {
     }
 }
 
-export async function getFavoriteActorsAction() {
+export async function getFavoriteActorsAction(page: number = 1, limit: number = 50) {
     let session;
     try {
         session = await auth();
@@ -76,7 +76,12 @@ export async function getFavoriteActorsAction() {
 
     await connectToDatabase();
 
-    const favorites = await FavoriteActor.find({ userId: session.user.id }).sort({ createdAt: -1 }).lean();
+    const skip = Math.max(0, (page - 1) * limit);
+    const favorites = await FavoriteActor.find({ userId: session.user.id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
 
     return favorites.map(f => ({
         id: f.actorId,

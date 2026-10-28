@@ -169,7 +169,7 @@ export async function getWatchlistStatusAction(movieId: number, mediaType: Watch
 }
 
 // Simplified for client-side filtering
-export async function getWatchlistAction() {
+export async function getWatchlistAction(page: number = 1, limit: number = 50) {
     let session;
     try {
         session = await auth();
@@ -181,7 +181,12 @@ export async function getWatchlistAction() {
 
     await connectToDatabase();
 
-    const watchlist = await Watchlist.find({ userId: session.user.id }).sort({ createdAt: -1 }).lean();
+    const skip = Math.max(0, (page - 1) * limit);
+    const watchlist = await Watchlist.find({ userId: session.user.id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
 
     return watchlist.map(item => {
         const isTV = item.media_type === "tv";
@@ -209,7 +214,7 @@ export async function getWatchlistAction() {
 }
 
 
-export async function getWatchedIdsAction() {
+export async function getWatchedIdsAction(limit: number = 500) {
     let session;
     try {
         session = await auth();
@@ -225,11 +230,13 @@ export async function getWatchedIdsAction() {
     const watchedItems = await Watchlist.find(
         { userId: session.user.id, watched: true },
         { movieId: 1, media_type: 1 }
-    ).lean();
+    )
+        .limit(limit)
+        .lean();
 
     return watchedItems.map(item => `${item.media_type || "movie"}:${getPublicMovieId(item.movieId, item.media_type)}`);
 }
-export async function getUserWatchlistAction() {
+export async function getUserWatchlistAction(page: number = 1, limit: number = 50) {
     let session;
     try {
         session = await auth();
@@ -241,7 +248,12 @@ export async function getUserWatchlistAction() {
 
     await connectToDatabase();
     // Sort by most recently added
-    const watchlist = await Watchlist.find({ userId: session.user.id }).sort({ createdAt: -1 }).lean();
+    const skip = Math.max(0, (page - 1) * limit);
+    const watchlist = await Watchlist.find({ userId: session.user.id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
 
     // Transform to Movie-like shape if needed, strictly speaking the schema matches close enough for display
     // Transform to Movie-like shape if needed, strictly speaking the schema matches close enough for display

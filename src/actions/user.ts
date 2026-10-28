@@ -80,8 +80,8 @@ export async function updateUserProfile(_prevState: UpdateProfileState, formData
 }
 
 const ChangePasswordSchema = z.object({
-    currentPassword: z.string().optional(),
-    newPassword: z.string().min(6, "Password must be at least 6 characters"),
+    currentPassword: z.string().max(72, "Password cannot exceed 72 characters").optional(),
+    newPassword: z.string().min(6, "Password must be at least 6 characters").max(72, "Password cannot exceed 72 characters"),
 });
 
 export async function updateUserPassword(prevState: any, formData: FormData) {
@@ -208,8 +208,8 @@ export async function forgotPassword(prevState: any, formData: FormData) {
 }
 
 const ResetPasswordSchema = z.object({
-    password: z.string().min(6, "Password must be at least 6 characters"),
-    confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
+    password: z.string().min(6, "Password must be at least 6 characters").max(72, "Password cannot exceed 72 characters"),
+    confirmPassword: z.string().min(6, "Password must be at least 6 characters").max(72, "Password cannot exceed 72 characters"),
 }).refine(data => data.password === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],

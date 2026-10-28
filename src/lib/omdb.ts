@@ -6,6 +6,7 @@ export interface ExternalRatings {
     rottenTomatoes?: string;
     metacritic?: string;
     awards?: string;
+    notFound?: boolean;
 }
 
 let omdbCooldownUntil = 0;
@@ -18,13 +19,23 @@ export function isOmdbInCooldown(): boolean {
     return Date.now() < omdbCooldownUntil;
 }
 
+export function getOmdbCooldownMs(): number {
+    const val = process.env.OMDB_COOLDOWN_MS;
+    if (val) {
+        const parsed = parseInt(val, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return 3600000;
+}
+
 function getOMDbCacheKey(title: string, year?: string): string {
-    const cleanTitle = title.trim().toLowerCase();
+    const cleanTitle = (title || "").trim().toLowerCase();
     const cleanYear = year && year !== "undefined" ? year.trim() : "";
     return `omdb:${cleanTitle}:${cleanYear}`;
 }
 
-async function isDBCooldownActive(): Promise<boolean> {
+export async function isDBCooldownActive(): Promise<boolean> {
+    if (Date.now() < omdbCooldownUntil) return true;
     try {
         if (!process.env.MONGODB_URI) return false;
         await connectToDatabase();
@@ -39,7 +50,7 @@ async function isDBCooldownActive(): Promise<boolean> {
     return false;
 }
 
-async function getCachedRatings(key: string): Promise<ExternalRatings | null> {
+export async function getCachedRatings(key: string): Promise<ExternalRatings | null> {
     try {
         if (!process.env.MONGODB_URI) return null;
         await connectToDatabase();
@@ -53,7 +64,7 @@ async function getCachedRatings(key: string): Promise<ExternalRatings | null> {
     return null;
 }
 
-async function setCachedRatings(key: string, ratings: ExternalRatings): Promise<void> {
+export async function setCachedRatings(key: string, ratings: ExternalRatings): Promise<void> {
     try {
         if (!process.env.MONGODB_URI) return;
         await connectToDatabase();
@@ -67,7 +78,7 @@ async function setCachedRatings(key: string, ratings: ExternalRatings): Promise<
     }
 }
 
-async function setDBCooldown(durationMs: number = 60 * 60 * 1000): Promise<void> {
+export async function setDBCooldown(durationMs: number = getOmdbCooldownMs()): Promise<void> {
     const cooldownUntil = new Date(Date.now() + durationMs);
     omdbCooldownUntil = cooldownUntil.getTime();
     try {
@@ -90,20 +101,27 @@ export async function getExternalRatings(title: string, year?: string): Promise<
         return null;
     }
 
+    // In-memory cooldown checked before DB query
     if (Date.now() < omdbCooldownUntil) {
         return null;
     }
 
     const cacheKey = getOMDbCacheKey(title, year);
 
-    // Check shared database cooldown across lambdas
-    if (await isDBCooldownActive()) {
+    // Concurrent DB queries for cached entry and cooldown
+    const [cooldownActive, cached] = await Promise.all([
+        isDBCooldownActive(),
+        getCachedRatings(cacheKey)
+    ]);
+
+    if (cooldownActive) {
         return null;
     }
 
-    // Check MongoDB cache for previously fetched ratings
-    const cached = await getCachedRatings(cacheKey);
     if (cached) {
+        if ((cached as any).notFound) {
+            return null;
+        }
         return cached;
     }
 
@@ -119,7 +137,10 @@ export async function getExternalRatings(title: string, year?: string): Promise<
         if (data.Response === "False") {
             if (typeof data.Error === "string" && data.Error.toLowerCase().includes("request limit")) {
                 console.warn("[OMDb] Daily request limit reached. Cooling down for 1 hour across lambdas.");
-                await setDBCooldown(60 * 60 * 1000); // 1 hour shared cooldown
+                await setDBCooldown(getOmdbCooldownMs());
+            } else {
+                // Negative caching: store { notFound: true } in OMDbCache
+                await setCachedRatings(cacheKey, { notFound: true });
             }
             return null;
         }
@@ -144,3 +165,4 @@ export async function getExternalRatings(title: string, year?: string): Promise<
         return null;
     }
 }
+

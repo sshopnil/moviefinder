@@ -19,7 +19,7 @@ declare module "@auth/core/jwt" {
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import connectToDatabase from "@/lib/db";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -58,8 +58,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             },
             authorize: async (credentials) => {
                 const parsedCredentials = await z.object({
-                    email: z.string().email(),
-                    password: z.string().min(6),
+                    email: z.string().email().max(254),
+                    password: z.string().min(6).max(72, "Password cannot exceed 72 characters"),
                 }).safeParseAsync(credentials);
 
                 if (!parsedCredentials.success) {
@@ -69,10 +69,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 const { password } = parsedCredentials.data;
                 const email = parsedCredentials.data.email.toLowerCase();
 
-                const rate = checkRateLimit(`login:${email}`, 10, 15 * 60 * 1000);
-                if (!rate.allowed) {
-                    return null;
-                }
+                const clientIp = await getClientIp();
+                const ipRate = checkRateLimit(`login-ip:${clientIp}`, 30, 15 * 60 * 1000);
+                if (!ipRate.allowed) return null;
+
+                const emailRate = checkRateLimit(`login-email:${email}`, 10, 15 * 60 * 1000);
+                if (!emailRate.allowed) return null;
 
                 try {
                     await connectToDatabase();

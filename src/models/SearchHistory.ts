@@ -11,6 +11,7 @@ const SearchHistorySchema = new mongoose.Schema(
         query: {
             type: String,
             required: true,
+            maxlength: 200,
         },
     },
     { timestamps: true }

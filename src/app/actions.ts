@@ -3,6 +3,8 @@
 import { movieService, tvService } from "@/lib/tmdb";
 import { AIRateLimitInfo, getMovieInsights, isAIRateLimitError } from "@/lib/ai";
 import { getExternalRatings } from "@/lib/omdb";
+import type { ExternalRatings } from "@/lib/omdb";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { Movie, TVSeries } from "@/types/movie";
 
 type AIActionResult<T> = {
@@ -11,6 +13,12 @@ type AIActionResult<T> = {
 };
 
 export async function searchMultiAction(query: string, page: number = 1) {
+    const clientIp = await getClientIp();
+    const rate = checkRateLimit(`search-action:${clientIp}`, 30, 60 * 1000);
+    if (!rate.allowed) {
+        return { movies: [], tv: [], people: [], total_pages: 0, total_results: 0 };
+    }
+
     try {
         return await movieService.searchMulti(query, page);
     } catch (error) {
@@ -42,13 +50,34 @@ export async function getMediaVerdictAction(
     mediaType: "movie" | "tv",
     id: number,
     title: string,
-    releaseDate?: string
+    releaseDate?: string,
+    initialRatings?: ExternalRatings | null,
+    initialReviews?: { content?: string }[]
 ): Promise<AIActionResult<any | null>> {
+    const clientIp = await getClientIp();
+    const rate = checkRateLimit(`verdict-action:${clientIp}`, 10, 60 * 1000);
+    if (!rate.allowed) {
+        return {
+            data: null,
+            rateLimit: {
+                limit: 10,
+                count: 10,
+                retryAfterSeconds: rate.retryAfterSeconds,
+                resetAt: rate.resetAt,
+            },
+        };
+    }
+
     try {
         const year = releaseDate ? releaseDate.split("-")[0] : undefined;
+
         const [reviewsResult, ratingsResult] = await Promise.allSettled([
-            mediaType === "movie" ? movieService.getMovieReviews(id) : tvService.getTVReviews(id),
-            getExternalRatings(title, year),
+            initialReviews !== undefined
+                ? Promise.resolve(initialReviews)
+                : (mediaType === "movie" ? movieService.getMovieReviews(id) : tvService.getTVReviews(id)),
+            initialRatings !== undefined
+                ? Promise.resolve(initialRatings)
+                : getExternalRatings(title, year),
         ]);
 
         const reviews = reviewsResult.status === "fulfilled" ? reviewsResult.value : [];
@@ -67,3 +96,4 @@ export async function getMediaVerdictAction(
         return { data: null };
     }
 }
+

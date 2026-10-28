@@ -114,7 +114,31 @@ export default async function Home(props: {
     isSearchOrFilter = true;
     viewTitle = "Filtered Results";
     try {
-      if (!type || type === "movie") {
+      if (!type) {
+        const [movieResults, tvResults] = await Promise.all([
+          movieService.getDiscover({
+            with_genres: with_genres ? getGenreIdForDiscover(with_genres, "movie") : undefined,
+            primary_release_year,
+            "vote_average.gte": vote_average_gte,
+            with_original_language,
+            region,
+            sort_by,
+            page: page.toString()
+          }),
+          tvService.getDiscover({
+            with_genres: with_genres ? getGenreIdForDiscover(with_genres, "tv") : undefined,
+            first_air_date_year: primary_release_year,
+            "vote_average.gte": vote_average_gte,
+            with_original_language,
+            region,
+            sort_by,
+            page: page.toString()
+          })
+        ]);
+        movies = movieResults.results;
+        tv = tvResults.results;
+        totalPages = Math.max(totalPages, movieResults.total_pages, tvResults.total_pages);
+      } else if (type === "movie") {
         const movieResults = await movieService.getDiscover({
           with_genres: with_genres ? getGenreIdForDiscover(with_genres, "movie") : undefined,
           primary_release_year,
@@ -126,8 +150,7 @@ export default async function Home(props: {
         });
         movies = movieResults.results;
         totalPages = Math.max(totalPages, movieResults.total_pages);
-      }
-      if (!type || type === "tv") {
+      } else if (type === "tv") {
         const tvResults = await tvService.getDiscover({
           with_genres: with_genres ? getGenreIdForDiscover(with_genres, "tv") : undefined,
           first_air_date_year: primary_release_year,

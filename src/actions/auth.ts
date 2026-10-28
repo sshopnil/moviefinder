@@ -8,9 +8,9 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 const signupSchema = z.object({
-    name: z.string().min(2, "Name must be at least 2 characters"),
-    email: z.string().email("Invalid email address"),
-    password: z.string().min(6, "Password must be at least 6 characters"),
+    name: z.string().trim().min(2, "Name must be at least 2 characters").max(100),
+    email: z.string().email("Invalid email address").max(254),
+    password: z.string().min(6, "Password must be at least 6 characters").max(72, "Password cannot exceed 72 characters"),
 });
 
 export type SignupState = {

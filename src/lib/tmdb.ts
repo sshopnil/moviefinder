@@ -118,17 +118,27 @@ export const movieService = {
     searchPeople: async (query: string, signal?: AbortSignal): Promise<any[]> => {
         if (!query) return [];
 
-        const maxPages = 3;
-        const pages = Array.from({ length: maxPages }, (_, i) => i + 1);
+        const firstPage = await fetchFromTMDB<{ results: any[]; total_pages: number }>(
+            "/search/person",
+            { query, page: "1" },
+            signal
+        ).catch(() => ({ results: [], total_pages: 0 }));
 
-        const promises = pages.map(page =>
-            fetchFromTMDB<{ results: any[] }>("/search/person", { query, page: page.toString() }, signal)
-                .catch(() => ({ results: [] }))
-        );
+        const totalPages = Math.min(3, firstPage.total_pages || 1);
+        let subsequentResults: any[] = [];
 
-        const results = await Promise.all(promises);
-        const allPeople = results.flatMap(r => r.results || []);
+        if (totalPages > 1) {
+            const pages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+            const subsequent = await Promise.all(
+                pages.map(page =>
+                    fetchFromTMDB<{ results: any[] }>("/search/person", { query, page: page.toString() }, signal)
+                        .catch(() => ({ results: [] }))
+                )
+            );
+            subsequentResults = subsequent.flatMap(r => r.results || []);
+        }
 
+        const allPeople = [...(firstPage.results || []), ...subsequentResults];
         const seen = new Set();
         const uniquePeople = allPeople.filter(p => {
             const duplicate = seen.has(p.id);

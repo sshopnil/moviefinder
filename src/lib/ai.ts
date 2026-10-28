@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, streamObject } from "ai";
+import { generateObject, generateText, streamObject } from "ai";
 import { createHash } from "node:crypto";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
@@ -9,8 +9,23 @@ import dbConnect from "./db.ts";
 import { movieService, tvService, TMDB_IMAGE_URL } from "./tmdb.ts";
 
 const AI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
-const MAX_RPM = Number(process.env.GEMINI_MAX_RPM) || 10;
+
+export function getMaxRpm(): number {
+    const val = process.env.GEMINI_MAX_RPM;
+    return val ? parseInt(val, 10) || 15 : 15;
+}
+
 const AI_CACHE_DB_TIMEOUT_MS = Number(process.env.AI_CACHE_DB_TIMEOUT_MS) || 5000;
+
+export const STOP_WORDS_REGEX = /\b(movies?|tv|shows?|series|watch|looking|for|recommendations?|films?|about|with)\b/gi;
+
+const GOOGLE_ZERO_THINKING_OPTIONS = {
+    google: {
+        thinkingConfig: {
+            thinkingBudget: 0,
+        },
+    },
+};
 
 const moodRecommendationSchema = z.object({
     title: z.string().trim().min(1),
@@ -74,6 +89,7 @@ const aiRateLimit = globalForAIRateLimit.__movieFinderAIRateLimit
     ?? (globalForAIRateLimit.__movieFinderAIRateLimit = { count: 0, resetAt: 0 });
 
 export function getAIRateLimitInfo(): AIRateLimitInfo {
+    const maxRpm = getMaxRpm();
     const now = Date.now();
     if (!aiRateLimit.resetAt || now >= aiRateLimit.resetAt) {
         aiRateLimit.count = 0;
@@ -81,7 +97,7 @@ export function getAIRateLimitInfo(): AIRateLimitInfo {
     }
     const retryAfterSeconds = Math.max(1, Math.ceil((aiRateLimit.resetAt - now) / 1000));
     return {
-        limit: MAX_RPM,
+        limit: maxRpm,
         count: aiRateLimit.count,
         retryAfterSeconds,
         resetAt: aiRateLimit.resetAt,
@@ -89,15 +105,16 @@ export function getAIRateLimitInfo(): AIRateLimitInfo {
 }
 
 export function markAIRateLimited(retryAfterSeconds = 60) {
+    const maxRpm = getMaxRpm();
     const now = Date.now();
     aiRateLimit.resetAt = now + Math.max(10, retryAfterSeconds) * 1000;
-    aiRateLimit.count = MAX_RPM;
+    aiRateLimit.count = maxRpm;
 }
 
 export function isQuotaError(error: unknown): boolean {
     if (!error) return false;
     const msg = error instanceof Error ? error.message : String(error);
-    const status = (error as any)?.status || (error as any)?.statusCode;
+    const status = (error as any)?.status || (error as any)?.statusCode || (error as any)?.response?.status;
     return status === 429 || /quota|resource_exhausted|rate limit|429/i.test(msg);
 }
 
@@ -106,6 +123,7 @@ function getAIKey() {
 }
 
 function consumeAIRateLimit() {
+    const maxRpm = getMaxRpm();
     const now = Date.now();
 
     if (!aiRateLimit.resetAt || now >= aiRateLimit.resetAt) {
@@ -115,9 +133,9 @@ function consumeAIRateLimit() {
 
     const retryAfterSeconds = Math.max(1, Math.ceil((aiRateLimit.resetAt - now) / 1000));
 
-    if (aiRateLimit.count >= MAX_RPM) {
+    if (aiRateLimit.count >= maxRpm) {
         throw new AIRateLimitError({
-            limit: MAX_RPM,
+            limit: maxRpm,
             count: aiRateLimit.count,
             retryAfterSeconds,
             resetAt: aiRateLimit.resetAt,
@@ -126,6 +144,7 @@ function consumeAIRateLimit() {
 
     aiRateLimit.count++;
 }
+
 
 const withCacheTimeout = async (promise: Promise<any>, ms: number) => {
     let timeoutId;
@@ -315,7 +334,7 @@ export function cleanLLMOutput(text: string): string {
             JSON.parse(candidate);
             return candidate;
         } catch {
-            const withCommas = candidate.replace(/(["\d]|true|false|null)\s*\n\s*("[a-zA-Z0-9_]+":)/g, "$1,\n$2");
+            const withCommas = candidate.replace(/(["\d]|true|false|null)[ \t]*\n[ \t]*("[a-zA-Z0-9_]+":)/g, "$1,\n$2");
             try {
                 JSON.parse(withCommas);
                 return withCommas;
@@ -328,7 +347,7 @@ export function cleanLLMOutput(text: string): string {
     // 4. Fallback if no block cleanly parsed: return the last block found or trimmed string
     if (blocksToTry.length > 0) {
         const lastBlock = blocksToTry[blocksToTry.length - 1];
-        return lastBlock.replace(/(["\d]|true|false|null)\s*\n\s*("[a-zA-Z0-9_]+":)/g, "$1,\n$2");
+        return lastBlock.replace(/(["\d]|true|false|null)[ \t]*\n[ \t]*("[a-zA-Z0-9_]+":)/g, "$1,\n$2");
     }
 
     return clean;
@@ -353,7 +372,6 @@ export async function getRecommendationsFromMood(mood: string) {
 
     const recommendationSchema = z.object({
         recommendations: z.array(z.object({
-
             title: z.string(),
             type: z.string(), // Relaxed from enum to prevent crashes
             reason: z.string().describe("Brief reason"),
@@ -366,33 +384,23 @@ export async function getRecommendationsFromMood(mood: string) {
         })).min(1).max(10)
     });
 
-    const parser = StructuredOutputParser.fromZodSchema(recommendationSchema);
-
-    const prompt = new PromptTemplate({
-        template: `Suggest 10 movies/TV shows for mood: "{mood}".
-        
-        CRITICAL:
-        1. Specific, not generic.
-        2. Vibe match.
-        3. Mix global/formats.
-        4. Sort by relevance.
-        5. Score between 0 and 100.
-        6. VALID JSON ONLY (Check commas!).
-        
-        Return the results in the following JSON format:
-        {format_instructions}`,
-        inputVariables: ["mood"],
-        partialVariables: { format_instructions: parser.getFormatInstructions() },
-    });
-
     try {
-        const input = await prompt.format({ mood });
-        const response = await invokeAI(apiKey, input, 0.7);
+        const google = createGoogleGenerativeAI({ apiKey });
+        const { object } = await generateObject({
+            model: google(AI_MODEL),
+            schema: recommendationSchema,
+            temperature: 0.7,
+            providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
+            prompt: `Suggest 10 movies/TV shows for mood: "${mood}".
+CRITICAL:
+1. Specific, not generic.
+2. Vibe match.
+3. Mix global/formats.
+4. Sort by relevance.
+5. Score between 0 and 100.`,
+        });
 
-        const cleaned = cleanLLMOutput(response.content as string);
-        const parsed = await parser.parse(cleaned);
-
-        const sorted = parsed.recommendations
+        const sorted = object.recommendations
             .map(rec => ({ ...rec, type: normalizeMediaType(rec.type), relevance_score: normalizeScore(rec.relevance_score), aiMeta: { source: 'ai' } }))
             .sort((a, b) => b.relevance_score - a.relevance_score)
             .slice(0, 10);
@@ -401,7 +409,10 @@ export async function getRecommendationsFromMood(mood: string) {
         return sorted;
     } catch (error: any) {
         console.log("AI Recommendation Error:", error);
-        // Fallback on any error to ensure results
+        if (isQuotaError(error)) {
+            markAIRateLimited();
+            return await getMoodFallback(mood, 1, undefined, getAIRateLimitInfo());
+        }
         return await getMoodFallback(mood);
     }
 }
@@ -471,6 +482,7 @@ export async function* streamRecommendationsFromMood(
                     temperature: 0.7,
                     maxOutputTokens: 4500,
                     abortSignal,
+                    providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
                     prompt: `Generate batch ${page} of recommendations for this mood: "${mood}".
 Return exactly ${requestedCount} distinct ${mediaType} recommendations.
 Use specific, varied global titles ordered by relevance. Scores must be from 0 to 100.
@@ -515,17 +527,7 @@ async function getMoodFallback(mood: string, page: number = 1, signal?: AbortSig
     try {
         if (signal?.aborted) return [];
 
-        const stopWords = [
-            "movies", "movie", "tv", "show", "series", "watch", "looking", "for", "recommendation",
-            "films", "film", "about", "with"
-        ];
-        let cleanQuery = mood.toLowerCase();
-
-        stopWords.forEach(word => {
-            cleanQuery = cleanQuery.replace(new RegExp(`\\b${word}\\b`, "g"), "");
-        });
-
-        cleanQuery = cleanQuery.trim().replace(/\s+/g, " ");
+        let cleanQuery = mood.toLowerCase().replace(STOP_WORDS_REGEX, "").trim().replace(/\s+/g, " ");
         if (!cleanQuery) cleanQuery = mood;
 
         console.log(`[Fallback] Searching TMDB for query: "${cleanQuery}" (Original: "${mood}")`);
@@ -598,8 +600,6 @@ export async function getMovieInsights(id: number | string, title: string, ratin
         critics_consensus: z.string().describe("Brief summary")
     });
 
-    const parser = StructuredOutputParser.fromZodSchema(insightsSchema);
-
     try {
         if (!Array.isArray(reviews)) {
             console.log("AI Verdict: Reviews is not an array, defaulting to empty.");
@@ -611,32 +611,26 @@ export async function getMovieInsights(id: number | string, title: string, ratin
             .map((r: any) => (r?.content ? r.content.substring(0, 200) : ""))
             .join(" | ");
 
-        const prompt = new PromptTemplate({
-            template: `Analyze "{title}".
-            Ratings: {ratingsSummary}
-            Reviews: {reviewsSummary}
-
-            Act as a witty friend. Provide verdict, reason, audience, feeling, ending, consensus.
-            
-            {format_instructions}`,
-            inputVariables: ["title", "ratingsSummary", "reviewsSummary"],
-            partialVariables: { format_instructions: parser.getFormatInstructions() },
+        const google = createGoogleGenerativeAI({ apiKey });
+        const { object } = await generateObject({
+            model: google(AI_MODEL),
+            schema: insightsSchema,
+            temperature: 0.7,
+            providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
+            prompt: `Analyze "${title}".\nRatings: ${ratingsSummary}\nReviews: ${reviewsSummary}\nAct as a witty friend. Provide verdict, reason, audience fit, feeling, ending vibe, and critics consensus.`,
         });
 
-        const input = await prompt.format({ title: title || "Unknown Title", ratingsSummary, reviewsSummary });
-        const response = await invokeAI(apiKey, input, 0.7);
-
-        const cleaned = cleanLLMOutput(response.content as string);
-        const parsed = await parser.parse(cleaned);
-
-        const result = { ...parsed, aiMeta: { source: 'ai' } };
+        const result = { ...object, aiMeta: { source: 'ai' } };
 
         await setCachedData(cacheKey, result);
         return result;
     } catch (error: any) {
         // Log only message to avoid "source map" parsing errors with complex objects
         console.log(`AI Verdict Error: ${error?.message || String(error)}`);
-        // Fallback on any error
+        if (isQuotaError(error)) {
+            markAIRateLimited();
+            return getInsightFallback(getAIRateLimitInfo());
+        }
         return getInsightFallback();
     }
 }
@@ -788,6 +782,7 @@ export async function* streamSimilarContent(
             temperature: 0.7,
             maxOutputTokens: 4500,
             abortSignal,
+            providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
             prompt: `Suggest 8 movies or TV shows similar to this ${type}: "${title}".
 Overview: ${overview}
 Genres: ${genres.slice(0, 3).join(", ")}
@@ -981,6 +976,7 @@ export async function* streamSeasonRanking(showTitle: string, seasons: any[], si
             temperature: 0.3,
             maxOutputTokens: 4500,
             abortSignal,
+            providerOptions: GOOGLE_ZERO_THINKING_OPTIONS,
             prompt: `Rank the seasons of "${showTitle}" from best to worst.
 Seasons:
 ${seasonsInfo}

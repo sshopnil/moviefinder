@@ -7,7 +7,29 @@ import { Movie, Season, TVSeries } from "@/types/movie";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request?: Request) {
+    let clientIp: string;
+    try {
+        clientIp = await getClientIp();
+    } catch {
+        clientIp = "anonymous";
+    }
+    if (clientIp === "anonymous" && request) {
+        const forwarded = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip");
+        if (forwarded) clientIp = forwarded.split(",")[0].trim();
+    }
+
+    const ipLimit = checkRateLimit(`ai-rec-get:${clientIp}`, 60, 60 * 1000);
+    if (!ipLimit.allowed) {
+        return Response.json(
+            { error: "Too many requests. Please wait a moment." },
+            {
+                status: 429,
+                headers: { "Retry-After": String(ipLimit.retryAfterSeconds) },
+            }
+        );
+    }
+
     return Response.json({
         rateLimit: getAIRateLimitInfo(),
     });
@@ -50,7 +72,7 @@ export async function POST(request: Request) {
     const origin = request.headers.get("origin");
     const referer = request.headers.get("referer");
 
-    if (!validateRequestOrigin(host, origin, referer)) {
+    if (!validateRequestOrigin(host, origin, referer, true)) {
         return Response.json({ error: "Invalid origin" }, { status: 403 });
     }
 
@@ -132,9 +154,7 @@ export async function POST(request: Request) {
                         signal: request.signal,
                     });
 
-                for await (const recommendation of recommendations) {
-                    if (request.signal.aborted || seen.size >= 6) break;
-
+                const hydrateRecommendation = async (recommendation: any) => {
                     try {
                         let media;
 
@@ -159,38 +179,59 @@ export async function POST(request: Request) {
                                 }
                             }
                             media = match
-                                ? { ...match, media_type: "name" in match ? "tv" as const : "movie" as const }
+                                ? { ...match, media_type: "name" in match ? ("tv" as const) : ("movie" as const) }
                                 : null;
                         }
 
-                        if (!media?.poster_path) continue;
-                        if (body.type && media.media_type !== body.type) continue;
-                        if (body.with_genres && !matchesGenreFilter(media.genre_ids, body.with_genres, media.media_type)) continue;
-
-                        const key = `${media.media_type}-${media.id}`;
-                        if (seen.has(key)) continue;
-                        seen.add(key);
-                        const { aiMeta: recommendationMeta, ...recommendationData } = recommendation;
-                        const isFallbackItem = recommendationMeta?.source === "fallback" || recommendationMeta?.source === "rate_limited";
-                        if (isFallbackItem) {
-                            usedFallback = true;
-                        }
-                        send({
-                            type: "item",
-                            item: {
-                                ...media,
-                                aiMeta: {
-                                    ...recommendationData,
-                                    source: recommendationMeta?.source || "ai",
-                                    rateLimit: recommendationMeta?.rateLimit || (isFallbackItem ? getAIRateLimitInfo() : undefined),
-                                },
-                            },
-                        });
-
-                        if (seen.size >= 6) break;
+                        return { media, recommendation };
                     } catch (error) {
                         console.error(`Failed to hydrate ${recommendation.title}:`, error);
+                        return null;
                     }
+                };
+
+                const hydrationTasks: Promise<{ media: any; recommendation: any } | null>[] = [];
+
+                for await (const recommendation of recommendations) {
+                    if (request.signal.aborted) break;
+                    hydrationTasks.push(hydrateRecommendation(recommendation));
+                    if (hydrationTasks.length >= 10) break;
+                }
+
+                const hydratedResults = await Promise.all(hydrationTasks);
+
+                for (const result of hydratedResults) {
+                    if (request.signal.aborted || seen.size >= 6) break;
+                    if (!result) continue;
+
+                    const { media, recommendation } = result;
+                    if (!media?.poster_path) continue;
+                    if (body.type && media.media_type !== body.type) continue;
+                    if (body.with_genres && !matchesGenreFilter(media.genre_ids, body.with_genres, media.media_type)) continue;
+
+                    const key = `${media.media_type}-${media.id}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+
+                    const { aiMeta: recommendationMeta, ...recommendationData } = recommendation;
+                    const isFallbackItem = recommendationMeta?.source === "fallback" || recommendationMeta?.source === "rate_limited";
+                    if (isFallbackItem) {
+                        usedFallback = true;
+                    }
+
+                    send({
+                        type: "item",
+                        item: {
+                            ...media,
+                            aiMeta: {
+                                ...recommendationData,
+                                source: recommendationMeta?.source || "ai",
+                                rateLimit: recommendationMeta?.rateLimit || (isFallbackItem ? getAIRateLimitInfo() : undefined),
+                            },
+                        },
+                    });
+
+                    if (seen.size >= 6) break;
                 }
 
                 if (seen.size === 0 && !request.signal.aborted) {

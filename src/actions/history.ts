@@ -6,21 +6,26 @@ import connectToDatabase from "@/lib/db";
 import SearchHistory from "@/models/SearchHistory";
 import RecentlyViewed from "@/models/RecentlyViewed";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
-export async function logSearchAction(query: string) {
+const SearchQuerySchema = z.string().trim().min(1).max(200);
+
+export async function logSearchAction(rawQuery: string) {
     const session = await auth();
     if (!session?.user?.id) return;
-    const trimmed = query.trim();
-    if (!trimmed) return;
+    const parsed = SearchQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) return;
 
     await connectToDatabase();
 
     await SearchHistory.findOneAndUpdate(
-        { userId: session.user.id, query: trimmed },
+        { userId: session.user.id, query: parsed.data },
         { $set: { updatedAt: new Date() } },
         { upsert: true }
     );
 }
+
+export const addSearchHistory = logSearchAction;
 
 export async function logViewAction(item: {
     id: number,

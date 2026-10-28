@@ -1,11 +1,14 @@
 export function validateRequestOrigin(
     hostHeader: string | null,
     originHeader: string | null,
-    refererHeader: string | null
+    refererHeader: string | null,
+    requireOrigin: boolean = false
 ): boolean {
-    if (!hostHeader) return true;
+    if (!hostHeader) return !requireOrigin;
+    if (!originHeader && !refererHeader) return !requireOrigin;
 
     const primaryHost = hostHeader.split(",")[0]?.trim().toLowerCase().replace(/:(80|443)$/, "");
+    if (!primaryHost) return !requireOrigin;
 
     if (originHeader) {
         try {
@@ -31,3 +34,4 @@ export function validateRequestOrigin(
 
     return true;
 }
+
