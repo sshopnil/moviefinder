@@ -46,14 +46,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trigger Coolify Deployment (if webhook is configured)
+      - name: Trigger Dokploy Deployment Webhook
         env:
-          COOLIFY_WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK }}
+          DOKPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WEBHOOK || secrets.COOLIFY_WEBHOOK }}
         run: |
-          if [ -n "$COOLIFY_WEBHOOK" ]; then
-            echo "Triggering Coolify deployment webhook..."
-            curl -fsSL "$COOLIFY_WEBHOOK" || echo "Webhook trigger skipped or failed"
+          if [ -n "$DOKPLOY_WEBHOOK" ]; then
+            echo "Triggering Dokploy deployment webhook..."
+            curl -fsSL -X GET "$DOKPLOY_WEBHOOK" || echo "Webhook trigger skipped or failed"
           else
-            echo "COOLIFY_WEBHOOK secret not configured. Skipping webhook call."
+            echo "DOKPLOY_WEBHOOK secret not configured. Skipping webhook call."
           fi
 
