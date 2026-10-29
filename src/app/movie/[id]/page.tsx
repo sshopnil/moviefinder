@@ -14,6 +14,7 @@ import { SimilarMedia } from "@/components/similar-media";
 import { AIRecommendationSectionSkeleton, MediaCardGridSkeleton, ReviewsSectionSkeleton } from "@/components/ai-result-skeletons";
 import { WatchProviders } from "@/components/watch-providers";
 import { SourceRecommendations } from "@/components/source-recommendations";
+import { MovieCastTabs } from "@/components/movie-cast-tabs";
 
 
 export const revalidate = 86400;
@@ -185,30 +186,13 @@ export default async function MoviePage({ params }: Props) {
                             </Suspense>
                         </div>
 
-                        <div className="space-y-4 pt-4 border-t border-white/10">
-                            <h3 className="text-lg font-semibold text-white">Top Cast</h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                                {movie.cast.map((actor: any) => (
-                                    <Link key={actor.id} href={`/person/${actor.id}`} prefetch={false} className="text-center group block">
-                                        <div className="relative w-full aspect-square rounded-full overflow-hidden mb-2 mx-auto max-w-[100px] bg-white/5 group-hover:ring-2 ring-white/20 transition-all">
-                                            {actor.profile_path ? (
-                                                <Image
-                                                    src={TMDB_IMAGE_URL.profile(actor.profile_path)}
-                                                    alt={actor.name}
-                                                    fill
-                                                    className="object-cover group-hover:scale-110 transition-transform"
-                                                    sizes="100px"
-                                                />
-                                            ) : (
-                                                <div className="flex items-center justify-center h-full text-xs text-gray-500">No Image</div>
-                                            )}
-                                        </div>
-                                        <p className="text-sm font-medium text-white truncate group-hover:text-blue-400 transition-colors">{actor.name}</p>
-                                        <p className="text-xs text-gray-400 truncate">{actor.character}</p>
-                                    </Link>
-                                ))}
-                            </div>
-                        </div>
+                        {/* Movie Cast & Characters Section */}
+                        <MovieCastTabs
+                            movieId={movie.id}
+                            movieTitle={movie.title}
+                            cast={movie.cast || []}
+                            crew={movie.crew || []}
+                        />
                         <div className="space-y-4 pt-4 border-t border-white/10 relative min-h-[300px]">
                             <Suspense fallback={<ReviewsSectionSkeleton />}>
                                 <MovieReviews id={movie.id} title={movie.title} releaseDate={movie.release_date} />

@@ -21,7 +21,7 @@ function getWatchedKey(movieOrId: WatchedMovie | number) {
     return `${mediaType}:${movieOrId.id}`;
 }
 
-const WatchedContext = createContext<WatchedContextType | null>(null);
+export const WatchedContext = createContext<WatchedContextType | null>(null);
 
 export function useWatched() {
     const context = useContext(WatchedContext);

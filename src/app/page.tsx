@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { logSearchAction } from "@/actions/history";
 import { Pagination } from "@/components/pagination";
 import { AISearchResults } from "@/components/ai-search-results";
+import { AIActorSearchResults } from "@/components/ai-actor-search-results";
 import { matchesGenreFilter, getGenreIdForDiscover } from "@/lib/genres";
 
 export const revalidate = 3600;
@@ -52,13 +53,24 @@ export default async function Home(props: {
 
   // Handle Mood Search separately to enable Brain Loader
   if (mood) {
+    const isActorAI = type === "person" && searchParams.actorId && searchParams.actorName;
+
     return (
       <main className="container mx-auto px-4 py-8 min-h-screen flex flex-col gap-8">
         <HomeHeader />
         <div className="flex flex-col gap-4">
           <SearchFilters />
-          <Suspense fallback={null}>
-            <AISearchResults mood={mood} type={type} with_genres={with_genres} page={page} />
+          <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="animate-spin text-gray-500" /></div>}>
+            {isActorAI ? (
+              <AIActorSearchResults
+                mood={mood}
+                actorId={Number(searchParams.actorId)}
+                actorName={searchParams.actorName || ""}
+                initialProfilePath={searchParams.actorProfile}
+              />
+            ) : (
+              <AISearchResults mood={mood} type={type} with_genres={with_genres} page={page} />
+            )}
           </Suspense>
         </div>
       </main>
@@ -67,48 +79,58 @@ export default async function Home(props: {
 
   if (query) {
     isSearchOrFilter = true;
-    viewTitle = type === "tv" ? `TV Series for "${query}"` : type === "movie" ? `Movies for "${query}"` : `Results for "${query}"`;
-    try {
-      logSearchAction(query).catch(err => console.error("Failed to log search:", err));
+    if (type === "person") {
+      viewTitle = `Actors & Actresses for "${query}"`;
+      try {
+        logSearchAction(query).catch(err => console.error("Failed to log search:", err));
+        people = await movieService.searchPeople(query);
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      viewTitle = type === "tv" ? `TV Series for "${query}"` : type === "movie" ? `Movies for "${query}"` : `Results for "${query}"`;
+      try {
+        logSearchAction(query).catch(err => console.error("Failed to log search:", err));
 
-      if (type === "movie") {
-        const results = await movieService.searchMovies(query, page);
-        movies = results.results;
-        totalPages = results.total_pages;
-      } else if (type === "tv") {
-        const results = await tvService.searchTV(query, page);
-        tv = results.results;
-        totalPages = results.total_pages;
-      } else {
-        const results = await movieService.searchMulti(query, page);
-        movies = results.movies;
-        tv = results.tv;
-        people = results.people;
-        totalPages = results.total_pages;
-      }
+        if (type === "movie") {
+          const results = await movieService.searchMovies(query, page);
+          movies = results.results;
+          totalPages = results.total_pages;
+        } else if (type === "tv") {
+          const results = await tvService.searchTV(query, page);
+          tv = results.results;
+          totalPages = results.total_pages;
+        } else {
+          const results = await movieService.searchMulti(query, page);
+          movies = results.movies;
+          tv = results.tv;
+          people = results.people;
+          totalPages = results.total_pages;
+        }
 
-      // Note: Filtering after fetching from TMDB might reduce results per page
-      // but TMDB doesn't support complex filtering in search_multi.
-      // For better results, if type is specified, we could use searchMovie/searchTV directly.
-      if (with_genres) {
-        movies = movies.filter(m => matchesGenreFilter(m.genre_ids, with_genres, "movie"));
-        tv = tv.filter(s => matchesGenreFilter(s.genre_ids, with_genres, "tv"));
+        // Note: Filtering after fetching from TMDB might reduce results per page
+        // but TMDB doesn't support complex filtering in search_multi.
+        // For better results, if type is specified, we could use searchMovie/searchTV directly.
+        if (with_genres) {
+          movies = movies.filter(m => matchesGenreFilter(m.genre_ids, with_genres, "movie"));
+          tv = tv.filter(s => matchesGenreFilter(s.genre_ids, with_genres, "tv"));
+        }
+        if (primary_release_year) {
+          movies = movies.filter(m => m.release_date?.startsWith(primary_release_year));
+          tv = tv.filter(s => s.first_air_date?.startsWith(primary_release_year));
+        }
+        if (vote_average_gte) {
+          const minVote = parseFloat(vote_average_gte);
+          movies = movies.filter(m => m.vote_average >= minVote);
+          tv = tv.filter(s => s.vote_average >= minVote);
+        }
+        if (with_original_language) {
+          movies = movies.filter(m => m.original_language === with_original_language);
+          tv = tv.filter(s => s.original_language === with_original_language);
+        }
+      } catch (e) {
+        console.error(e);
       }
-      if (primary_release_year) {
-        movies = movies.filter(m => m.release_date?.startsWith(primary_release_year));
-        tv = tv.filter(s => s.first_air_date?.startsWith(primary_release_year));
-      }
-      if (vote_average_gte) {
-        const minVote = parseFloat(vote_average_gte);
-        movies = movies.filter(m => m.vote_average >= minVote);
-        tv = tv.filter(s => s.vote_average >= minVote);
-      }
-      if (with_original_language) {
-        movies = movies.filter(m => m.original_language === with_original_language);
-        tv = tv.filter(s => s.original_language === with_original_language);
-      }
-    } catch (e) {
-      console.error(e);
     }
   } else if (type || with_genres || primary_release_year || vote_average_gte || with_original_language || region || sort_by) {
     isSearchOrFilter = true;
@@ -229,53 +251,76 @@ export default async function Home(props: {
       <div className="flex flex-col gap-4">
         <SearchFilters />
 
-        {people.length > 0 && (
-          <div className="mb-8 animate-in fade-in slide-in-from-bottom-4">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white pl-2 border-l-4 border-blue-500">People</h2>
-              {people.length > 5 && (
-                <Link href={`/search/people?q=${encodeURIComponent(query as string)}`} prefetch={false} className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
-                  View All People ({people.length})
-                </Link>
-              )}
+        {type === "person" ? (
+          <div className="space-y-6 animate-in fade-in">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white pl-2 border-l-4 border-purple-500">
+                {viewTitle} ({people.length})
+              </h2>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {people.slice(0, 6).map((person) => (
-                <PersonCard key={person.id} person={person} />
-              ))}
-            </div>
+            {people.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {people.map((person) => (
+                  <PersonCard key={person.id} person={person} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-20 text-gray-500">
+                No actors or actresses found for &quot;{query}&quot;. Try a different name.
+              </div>
+            )}
           </div>
-        )}
+        ) : (
+          <>
+            {people.length > 0 && (
+              <div className="mb-8 animate-in fade-in slide-in-from-bottom-4">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-white pl-2 border-l-4 border-blue-500">People</h2>
+                  {people.length > 5 && (
+                    <Link href={`/search/people?q=${encodeURIComponent(query as string)}`} prefetch={false} className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                      View All People ({people.length})
+                    </Link>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  {people.slice(0, 6).map((person) => (
+                    <PersonCard key={person.id} person={person} />
+                  ))}
+                </div>
+              </div>
+            )}
 
-        <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="animate-spin text-gray-500" /></div>}>
-          {isSearchOrFilter ? (
-            <div className="space-y-12">
-              {[...movies, ...tv].length > 0 ? (
-                <>
-                  <MovieGrid movies={[...movies, ...tv] as any} title={viewTitle} />
-                  <Pagination currentPage={page} totalPages={totalPages} />
-                </>
+            <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="animate-spin text-gray-500" /></div>}>
+              {isSearchOrFilter ? (
+                <div className="space-y-12">
+                  {[...movies, ...tv].length > 0 ? (
+                    <>
+                      <MovieGrid movies={[...movies, ...tv] as any} title={viewTitle} />
+                      <Pagination currentPage={page} totalPages={totalPages} />
+                    </>
+                  ) : (
+                    <div className="text-center py-20 text-gray-500">
+                      No results found. Try a different search.
+                    </div>
+                  )}
+                </div>
               ) : (
-                <div className="text-center py-20 text-gray-500">
-                  No results found. Try a different search.
+                <div className="space-y-4">
+                  {homeSections.map((section) => (
+                    <MovieSection
+                      key={section.title}
+                      title={section.title}
+                      movies={section.items as any}
+                      description={section.description}
+                      viewAllLink={section.viewAllLink}
+                      totalCount={section.totalCount}
+                    />
+                  ))}
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {homeSections.map((section) => (
-                <MovieSection
-                  key={section.title}
-                  title={section.title}
-                  movies={section.items as any}
-                  description={section.description}
-                  viewAllLink={section.viewAllLink}
-                  totalCount={section.totalCount}
-                />
-              ))}
-            </div>
-          )}
-        </Suspense>
+            </Suspense>
+          </>
+        )}
       </div>
     </main>
   );

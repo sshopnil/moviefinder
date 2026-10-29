@@ -7,6 +7,10 @@ import { z } from "zod";
 import AICache from "../models/AICache.ts";
 import dbConnect from "./db.ts";
 import { movieService, tvService, TMDB_IMAGE_URL } from "./tmdb.ts";
+import type { Movie, TVSeries, AIRecommendation } from "../types/movie.ts";
+import { normalizeScore } from "./utils.ts";
+import { getGenreName } from "./genres.ts";
+export { normalizeScore };
 
 const AI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
@@ -237,15 +241,6 @@ function normalizeMediaType(type: string): "movie" | "tv" {
     return "tv"; // Default to TV for "anime", "series", "show", etc.
 }
 
-function normalizeScore(score: number): number {
-    // If score is tiny (e.g. 0.85), assume 0-1 scale -> 85
-    if (score <= 1) return Math.round(score * 100);
-    // If score is small (e.g. 9.5), assume 0-10 scale -> 95
-    if (score <= 10) return Math.round(score * 10);
-    // Cap at 100 and round
-    if (score > 100) return 100;
-    return Math.round(score);
-}
 
 /**
  * Helper to clean AI output and extract JSON
@@ -1006,4 +1001,432 @@ function getSeasonRankingFallback(seasons: any[], rateLimit?: AIRateLimitInfo) {
         critics_consensus: "Ratings based ranking.",
         aiMeta: rateLimit ? { source: 'rate_limited', rateLimit } : { source: 'fallback' }
     }));
+}
+
+export interface ActorAIRecommendationsResult {
+    actorMatches: ((Movie | TVSeries) & {
+        aiMeta: AIRecommendation;
+        match_score?: number;
+        relevance_score?: number;
+        reason?: string;
+    })[];
+    allCredits: (Movie | TVSeries)[];
+    actorDetails?: {
+        id: number;
+        name: string;
+        profile_path: string | null;
+        known_for_department?: string;
+    };
+    disclaimer?: string;
+    rateLimit?: AIRateLimitInfo;
+}
+
+const actorMatchEvaluationSchema = z.object({
+    matches: z.array(z.object({
+        id: z.number().describe("TMDB ID of the title from candidates"),
+        title: z.string().optional(),
+        type: z.string().optional(),
+        relevance_score: z.number().describe("0 to 100 score on how well it fits the vibe/plot"),
+        reason: z.string().describe("Specific reason why this title matches the mood/plot/vibe"),
+        target_audience: z.string().optional().describe("Target audience"),
+        why_watch: z.string().optional().describe("Why to watch this for the mood"),
+        ending_mood: z.string().optional().describe("Ending vibe/feeling"),
+        emotional_impact: z.string().optional().describe("Emotional impact"),
+        critics_consensus: z.string().optional().describe("Brief consensus summary"),
+    })).min(1).max(8),
+});
+
+const NON_NARRATIVE_GENRES = new Set([10767, 10763, 10764]);
+const NON_NARRATIVE_CHAR_REGEX = /^(self\b|himself\b|herself\b|guest\b|host\b|cameo\b|presenter\b)/i;
+
+function isNonNarrativeCredit(item: any): boolean {
+    const genres: number[] = item.genre_ids || [];
+    if (genres.some(id => NON_NARRATIVE_GENRES.has(id))) return true;
+    const character: string = (item.character || "").trim();
+    if (character && NON_NARRATIVE_CHAR_REGEX.test(character)) return true;
+    return false;
+}
+
+interface MoodTheme {
+    theme: string;
+    triggers: string[];
+    genres: number[];
+    keywords: string[];
+    reasonTemplate: (title: string, actor: string) => string;
+}
+
+const ACTOR_MOOD_TAXONOMY: MoodTheme[] = [
+    {
+        theme: "spicy",
+        triggers: ["spicy", "steamy", "erotic", "sexy", "sensual", "hot", "passion", "provocative", "desire", "intimate", "lust", "seductive", "seduction", "romantic", "romance", "affair", "infidelity"],
+        genres: [10749, 18, 53], // Romance, Drama, Thriller
+        keywords: ["erotic", "passion", "desire", "sensual", "intimate", "provocative", "lust", "seduction", "affair", "relationship", "obsession", "temptation", "sex", "lovers", "intimacy"],
+        reasonTemplate: (title, actor) => `A passionate, sensual drama featuring ${actor} that directly embodies this spicy romantic vibe.`,
+    },
+    {
+        theme: "cyberpunk",
+        triggers: ["cyberpunk", "hacker", "hack", "simulation", "dystopian", "scifi", "sci-fi", "futuristic", "ai", "virtual", "cyborg", "tech-noir"],
+        genres: [878, 28, 53],
+        keywords: ["cyberpunk", "hacker", "simulation", "virtual", "reality", "rebels", "dystopian", "technology", "artificial", "future", "cyborg", "android", "cybernetics", "neural"],
+        reasonTemplate: (title, actor) => `A landmark sci-fi entry featuring ${actor} with high-tech dystopian and virtual reality themes.`,
+    },
+    {
+        theme: "dark_thriller",
+        triggers: ["dark", "gritty", "noir", "crime", "detective", "murder", "killer", "investigation", "mystery", "psychological", "suspense", "mind-bending", "trippy"],
+        genres: [80, 53, 9648, 18],
+        keywords: ["crime", "murder", "detective", "mystery", "killer", "noir", "underworld", "conspiracy", "corruption", "dark", "gritty", "danger", "secret", "psychological", "suspense", "simulation"],
+        reasonTemplate: (title, actor) => `A gripping dark drama featuring ${actor} immersed in mystery, tension, and high-stakes conflict.`,
+    },
+    {
+        theme: "comedy",
+        triggers: ["funny", "hilarious", "comedy", "humor", "laugh", "silly", "satire", "parody", "goofy", "fun"],
+        genres: [35],
+        keywords: ["comedy", "hilarious", "humor", "joke", "funny", "laugh", "comic", "parody", "satire", "friends", "goofy", "amusing", "witty"],
+        reasonTemplate: (title, actor) => `A crowd-pleasing comedy showcasing ${actor}'s wit, humor, and comedic timing.`,
+    },
+    {
+        theme: "horror",
+        triggers: ["horror", "scary", "spooky", "creepy", "slasher", "gore", "gory", "brutal", "zombie", "monster", "demon", "blood", "massacre"],
+        genres: [27, 53],
+        keywords: ["horror", "terror", "nightmare", "demon", "monster", "slasher", "blood", "gore", "massacre", "zombie", "haunted", "witch", "evil", "supernatural", "frightening"],
+        reasonTemplate: (title, actor) => `A chilling horror entry with ${actor} facing intense dread, tension, and terrifying stakes.`,
+    },
+    {
+        theme: "tearjerker",
+        triggers: ["tearjerker", "sad", "crying", "emotional", "heartbreaking", "melancholy", "poignant", "tragedy"],
+        genres: [18, 10749],
+        keywords: ["tear", "grief", "loss", "death", "terminal", "heartbreak", "tragedy", "poignant", "melancholy", "struggle", "emotional", "sorrow", "mourning"],
+        reasonTemplate: (title, actor) => `A deeply moving drama highlighting ${actor}'s poignant, emotional performance.`,
+    },
+    {
+        theme: "action",
+        triggers: ["action", "badass", "explosive", "adrenaline", "fight", "combat", "martial", "stunt", "hero", "agent", "assassin", "chase"],
+        genres: [28, 12, 10759],
+        keywords: ["action", "assassin", "agent", "chase", "combat", "fight", "explosion", "weapon", "mission", "revenge", "adrenaline", "warrior", "tactical"],
+        reasonTemplate: (title, actor) => `An adrenaline-fueled action showcase featuring ${actor} in high-octane sequences.`,
+    },
+    {
+        theme: "cozy",
+        triggers: ["cozy", "wholesome", "feel-good", "uplifting", "heartwarming", "family", "sweet", "charming"],
+        genres: [10751, 35, 10749],
+        keywords: ["heartwarming", "friendship", "family", "uplifting", "sweet", "charming", "cozy", "inspiring", "feel-good", "comforting", "gentle"],
+        reasonTemplate: (title, actor) => `A heartwarming, feel-good story that highlights ${actor}'s charming and uplifting screen presence.`,
+    },
+];
+
+const QUERY_STOP_WORDS_REGEX = /\b(movies?|tv|shows?|series|films?|of|her|him|she|he|them|their|his|starring|with|by|in|actor|actress|like|about|for|watch|give|me|recommend|recommendation|recommendations|something|good|best|a|an|the)\b/gi;
+
+interface FallbackCacheEntry {
+    data: ActorAIRecommendationsResult;
+    expiresAt: number;
+}
+const actorFallbackCache = new Map<string, FallbackCacheEntry>();
+
+export function clearActorFallbackCache() {
+    actorFallbackCache.clear();
+}
+
+export async function getActorRecommendations(
+    actorId: number,
+    actorName: string,
+    mood: string,
+    signal?: AbortSignal,
+    existingCredits?: any[],
+    existingPerson?: any
+): Promise<ActorAIRecommendationsResult> {
+    const cleanMood = mood.trim().slice(0, 250);
+    const cleanName = actorName.trim().slice(0, 100);
+
+    if (!cleanMood || !cleanName || !Number.isFinite(actorId)) {
+        return { actorMatches: [], allCredits: [] };
+    }
+
+    const cacheKey = makeAICacheKey("ai_actor_recs_v3", `${actorId}_${cleanMood}`);
+    const cached = await getCachedData(cacheKey);
+    if (cached) return cached;
+
+    const fallbackCached = actorFallbackCache.get(cacheKey);
+    if (fallbackCached && fallbackCached.expiresAt > Date.now()) {
+        return fallbackCached.data;
+    }
+
+    const [personDetails, rawCredits] = await Promise.all([
+        existingPerson !== undefined
+            ? Promise.resolve(existingPerson)
+            : movieService.getPersonDetails(actorId, signal).catch(() => null),
+        existingCredits !== undefined
+            ? Promise.resolve(existingCredits)
+            : movieService.getPersonCombinedCredits(actorId, signal).catch(() => []),
+    ]);
+    const seen = new Set<string>();
+    const allCredits: (Movie | TVSeries)[] = [];
+
+    const safeRawCredits = Array.isArray(rawCredits) ? rawCredits : [];
+    for (const credit of safeRawCredits) {
+        if (!credit || !credit.id) continue;
+        const key = `${credit.media_type || "movie"}-${credit.id}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            allCredits.push(credit);
+        }
+    }
+
+    if (allCredits.length === 0) {
+        return {
+            actorMatches: [],
+            allCredits: [],
+            actorDetails: {
+                id: actorId,
+                name: personDetails?.name || cleanName,
+                profile_path: personDetails?.profile_path || null,
+                known_for_department: personDetails?.known_for_department || "Acting",
+            },
+            disclaimer: `No credits found on TMDB for ${cleanName}.`,
+        };
+    }
+
+    // Pre-filter candidates: exclude talk shows and self appearances unless no narrative credits exist
+    const narrativeCredits = allCredits.filter(c => !isNonNarrativeCredit(c));
+    const pool = narrativeCredits.length > 0 ? narrativeCredits : allCredits;
+
+    // Candidates for LLM evaluation, enriched with genre names
+    const candidates = pool.slice(0, 25).map((item) => {
+        const isTV = item.media_type === "tv" || "name" in item;
+        const title = isTV ? (item as TVSeries).name : (item as Movie).title;
+        const year = isTV
+            ? (item as TVSeries).first_air_date?.slice(0, 4) || ""
+            : (item as Movie).release_date?.slice(0, 4) || "";
+        const genres = (item.genre_ids || [])
+            .map((id: number) => getGenreName(id))
+            .filter((name: string) => name !== "Unknown");
+
+        return {
+            id: item.id,
+            title,
+            type: isTV ? ("tv" as const) : ("movie" as const),
+            year,
+            genres,
+            genre_ids: item.genre_ids || [],
+            overview: (item.overview || "").slice(0, 200),
+            character: (item as any).character || "",
+            popularity: item.popularity || 0,
+            vote_average: item.vote_average || 0,
+        };
+    });
+
+    const apiKey = getAIKey();
+    let isFallback = !apiKey;
+    let rateLimitInfo: AIRateLimitInfo | undefined;
+
+    if (!isFallback) {
+        try {
+            consumeAIRateLimit();
+        } catch (error) {
+            if (isAIRateLimitError(error)) {
+                isFallback = true;
+                rateLimitInfo = error.rateLimit;
+            } else {
+                throw error;
+            }
+        }
+    }
+
+    let evaluatedMatches: any[] = [];
+
+    if (!isFallback && apiKey) {
+        try {
+            const google = createGoogleGenerativeAI({ apiKey });
+            const abortSignal = signal
+                ? AbortSignal.any([AbortSignal.timeout(45_000), signal])
+                : AbortSignal.timeout(45_000);
+
+            const prompt = `You are a film and television expert curator.
+The user wants recommendations performed by the actor/actress "${cleanName}" that match this vibe/plot/mood context:
+"${cleanMood}"
+
+Query interpretation instructions:
+1. Referential pronouns: Phrases like "of her", "of him", "starring her", "with him", "her movies" refer directly to "${cleanName}". Focus on the descriptive mood and genre intent.
+2. Colloquial & semantic mood interpretation:
+   - "spicy" / "steamy" / "hot" refers to erotic romance, sensual drama, intimate passion, or provocative relationships.
+   - "tearjerker" / "sad" refers to poignant emotional drama or tragedy.
+   - "mind-bending" / "trippy" refers to psychological thriller, surreal mystery, or complex sci-fi.
+   - "cozy" / "feel-good" refers to lighthearted romance, heartwarming comedy, or family drama.
+   Interpret slang, vibes, and colloquial expressions according to their emotional and thematic meaning in film.
+3. Candidate list:
+${JSON.stringify(candidates)}
+
+Selection instructions:
+- Select up to 8 titles from the candidate list that best embody this vibe or plot.
+- For each selected title, use its exact TMDB id from the list.
+- If ${cleanName} has works that strongly fit the requested mood/vibe, prioritize them with high scores (80-98) based on thematic resonance.
+- If ${cleanName} does NOT have works that strongly match this vibe (e.g. asking for slasher horror for an actor with only romcoms), pick the 3-5 closest titles, but be honest and score them appropriately lower (< 60).
+- Fill in reason specifically for each title.`;
+
+            const { object } = await generateObject({
+                model: (google as any)(AI_MODEL, { thinkingConfig: { thinkingBudget: 0 } }),
+                schema: actorMatchEvaluationSchema,
+                temperature: 0.3,
+                abortSignal,
+                prompt,
+            });
+
+            evaluatedMatches = object.matches || [];
+        } catch (error: any) {
+            console.error("AI Actor Evaluation Error:", error);
+            if (isQuotaError(error)) {
+                markAIRateLimited();
+                rateLimitInfo = getAIRateLimitInfo();
+            }
+            isFallback = true;
+        }
+    }
+
+    // Semantic fallback if AI was unavailable, rate-limited, timed out, or failed
+    if (isFallback || evaluatedMatches.length === 0) {
+        const queryLower = cleanMood.toLowerCase();
+        const rawWords = queryLower
+            .replace(QUERY_STOP_WORDS_REGEX, " ")
+            .split(/[\s,.-]+/)
+            .map(w => w.trim())
+            .filter(w => w.length >= 3);
+
+        const matchedThemes = ACTOR_MOOD_TAXONOMY.filter(t =>
+            t.triggers.some(tr => queryLower.includes(tr) || rawWords.includes(tr))
+        );
+
+        const scoredCandidates = candidates.map(c => {
+            const text = `${c.title} ${c.overview || ""} ${c.character || ""}`.toLowerCase();
+            let score = (matchedThemes.length > 0 || rawWords.length > 0) ? 40 : 35;
+
+            // Direct salient word matching
+            for (const w of rawWords) {
+                if (c.title.toLowerCase().includes(w)) {
+                    score += 25;
+                } else if (text.includes(w)) {
+                    score += 15;
+                }
+            }
+
+            // Theme-based genre and keyword expansion
+            for (const theme of matchedThemes) {
+                for (const g of theme.genres) {
+                    if (c.genre_ids.includes(g)) score += 18;
+                }
+                for (const kw of theme.keywords) {
+                    if (text.includes(kw)) {
+                        score += 10;
+                    }
+                }
+            }
+
+            // Media type preference if requested in query
+            if (/\b(movies?|films?)\b/i.test(cleanMood) && c.type === "movie") score += 5;
+            if (/\b(tv|shows?|series)\b/i.test(cleanMood) && c.type === "tv") score += 5;
+
+            const finalScore = Math.min(96, Math.max(25, score));
+
+            const reason = matchedThemes[0]
+                ? (finalScore >= 60
+                    ? matchedThemes[0].reasonTemplate(c.title, cleanName)
+                    : `Closest work in ${cleanName}'s filmography, though thematic overlap with "${cleanMood}" is limited.`)
+                : `Prominent work in ${cleanName}'s filmography matching themes around "${cleanMood}".`;
+
+            return {
+                id: c.id,
+                title: c.title,
+                type: c.type,
+                relevance_score: finalScore,
+                reason,
+                target_audience: "Fans of " + cleanName,
+                why_watch: `Showcases ${cleanName}'s performance in this genre.`,
+                ending_mood: "Reflective",
+                emotional_impact: "Engaging",
+                critics_consensus: "A notable entry in the actor's repertoire.",
+            };
+        });
+
+        scoredCandidates.sort((a, b) => b.relevance_score - a.relevance_score);
+        evaluatedMatches = scoredCandidates.slice(0, 8);
+    }
+
+    // Merge evaluated matches with original full TMDB data
+    const actorMatches: ((Movie | TVSeries) & {
+        aiMeta: AIRecommendation;
+        match_score?: number;
+        relevance_score?: number;
+        reason?: string;
+    })[] = [];
+    const matchedKeys = new Set<string>();
+
+    for (const match of evaluatedMatches) {
+        const targetType = normalizeMediaType(match.type);
+        const fullItem = allCredits.find(c => c.id === match.id && (c.media_type === targetType || (targetType === "tv" ? "first_air_date" in c : "release_date" in c)))
+            || allCredits.find(c => c.id === match.id);
+        if (!fullItem) continue;
+
+        const normalizedType: "movie" | "tv" = (fullItem.media_type === "movie" || fullItem.media_type === "tv")
+            ? fullItem.media_type
+            : targetType;
+
+        const matchKey = `${normalizedType}:${match.id}`;
+        if (matchedKeys.has(matchKey)) continue;
+        matchedKeys.add(matchKey);
+
+        const normalizedScore = normalizeScore(match.relevance_score);
+
+        actorMatches.push({
+            ...fullItem,
+            media_type: normalizedType,
+            match_score: normalizedScore,
+            relevance_score: normalizedScore,
+            reason: match.reason,
+            aiMeta: {
+                title: match.title || (normalizedType === "tv" ? (fullItem as TVSeries).name : (fullItem as Movie).title) || "",
+                type: normalizedType,
+                reason: match.reason,
+                relevance_score: normalizedScore,
+                target_audience: match.target_audience,
+                why_watch: match.why_watch,
+                ending_mood: match.ending_mood,
+                emotional_impact: match.emotional_impact,
+                critics_consensus: match.critics_consensus,
+                source: isFallback ? (rateLimitInfo ? "rate_limited" : "fallback") : "ai",
+                rateLimit: rateLimitInfo,
+            },
+        });
+    }
+
+    actorMatches.sort((a, b) => (b.aiMeta.relevance_score || 0) - (a.aiMeta.relevance_score || 0));
+
+    // Check if max score is below 60 to add friendly disclaimer
+    let disclaimer: string | undefined;
+    const maxScore = actorMatches.length > 0 ? Math.max(...actorMatches.map(m => m.aiMeta.relevance_score)) : 0;
+    if (maxScore > 0 && maxScore < 60) {
+        disclaimer = `No works strongly match "${cleanMood}" in ${cleanName}'s filmography. Showing their closest works below.`;
+    }
+
+    const result: ActorAIRecommendationsResult = {
+        actorMatches,
+        allCredits,
+        actorDetails: {
+            id: actorId,
+            name: personDetails?.name || cleanName,
+            profile_path: personDetails?.profile_path || null,
+            known_for_department: personDetails?.known_for_department || "Acting",
+        },
+        disclaimer,
+        rateLimit: rateLimitInfo,
+    };
+
+    if (!isFallback && actorMatches.length > 0) {
+        await setCachedData(cacheKey, result);
+    } else if (actorMatches.length > 0) {
+        // Cache fallback results with a reasonable TTL (5 minutes) so repeated queries don't re-execute
+        actorFallbackCache.set(cacheKey, {
+            data: result,
+            expiresAt: Date.now() + 5 * 60 * 1000,
+        });
+    }
+
+    return result;
 }

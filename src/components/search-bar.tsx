@@ -1,17 +1,28 @@
 "use client";
 
-import { Star, Loader2, Play, ChevronDown, Film, Tv, Bot, Check } from "lucide-react";
+import { Star, Loader2, Play, ChevronDown, Film, Tv, Bot, Check, User, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { searchMultiAction } from "@/app/actions";
+import { searchMultiAction, searchPeopleAction } from "@/app/actions";
 import { Movie, TVSeries } from "@/types/movie";
 import { TMDB_IMAGE_URL } from "@/lib/tmdb";
 import Image from "@/components/ui/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+export interface SelectedActor {
+    id: number;
+    name: string;
+    profile_path: string | null;
+}
+
 interface SearchBarProps {
-    onSearch?: (query: string, type: "movie" | "tv", isAI: boolean) => void;
+    onSearch?: (
+        query: string,
+        type: "movie" | "tv" | "person",
+        isAI: boolean,
+        actor?: SelectedActor | null
+    ) => void;
     searchLoading?: boolean;
     className?: string;
 }
@@ -25,10 +36,26 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
     const isInitialAI = Boolean(searchParams.get("mood"));
 
     const [query, setQuery] = useState(urlQuery);
-    const [mediaType, setMediaType] = useState<"movie" | "tv">(urlType === "tv" ? "tv" : "movie"); // Movie by default
+    const [mediaType, setMediaType] = useState<"movie" | "tv" | "person">(
+        urlType === "tv" ? "tv" : urlType === "person" ? "person" : "movie"
+    );
     const [isAIMode, setIsAIMode] = useState(isInitialAI);
     const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+    const [selectedActor, setSelectedActor] = useState<SelectedActor | null>(() => {
+        const actorId = searchParams.get("actorId");
+        const actorName = searchParams.get("actorName");
+        if (actorId && actorName) {
+            return {
+                id: Number(actorId),
+                name: actorName,
+                profile_path: null,
+            };
+        }
+        return null;
+    });
+
     const [suggestions, setSuggestions] = useState<(Movie | TVSeries)[]>([]);
+    const [actorSuggestions, setActorSuggestions] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -40,10 +67,21 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
         const nextQuery = searchParams.get("mood") || searchParams.get("q") || "";
         const nextType = searchParams.get("type");
         const nextIsAI = Boolean(searchParams.get("mood"));
+        const actorId = searchParams.get("actorId");
+        const actorName = searchParams.get("actorName");
 
         setQuery(nextQuery);
-        if (nextType === "tv" || nextType === "movie") {
+        if (nextType === "tv" || nextType === "movie" || nextType === "person") {
             setMediaType(nextType);
+        }
+        if (actorId && actorName) {
+            setSelectedActor((prev) => ({
+                id: Number(actorId),
+                name: actorName,
+                profile_path: prev?.id === Number(actorId) ? prev.profile_path : null,
+            }));
+        } else if (nextType !== "person") {
+            setSelectedActor(null);
         }
         setIsAIMode(nextIsAI);
         setShowSuggestions(false);
@@ -55,13 +93,40 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
         setShowSuggestions(false);
         setShowTypeDropdown(false);
 
+        // If AI Mode and Person is selected, an actor must be selected first
+        if (isAIMode && mediaType === "person") {
+            if (!selectedActor) {
+                inputRef.current?.focus();
+                return;
+            }
+            if (!query.trim()) {
+                inputRef.current?.focus();
+                return;
+            }
+
+            if (onSearch) {
+                onSearch(query.trim(), "person", true, selectedActor);
+            } else {
+                const encoded = encodeURIComponent(query.trim());
+                const profileParam = selectedActor.profile_path
+                    ? `&actorProfile=${encodeURIComponent(selectedActor.profile_path)}`
+                    : "";
+                router.push(
+                    `/?mood=${encoded}&type=person&actorId=${selectedActor.id}&actorName=${encodeURIComponent(
+                        selectedActor.name
+                    )}${profileParam}`
+                );
+            }
+            return;
+        }
+
         if (!query.trim()) {
             inputRef.current?.focus();
             return;
         }
 
         if (onSearch) {
-            onSearch(query.trim(), mediaType, isAIMode);
+            onSearch(query.trim(), mediaType, isAIMode, selectedActor);
         } else {
             const encoded = encodeURIComponent(query.trim());
             if (isAIMode) {
@@ -72,39 +137,62 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
         }
     };
 
-    const handleTypeSelect = (type: "movie" | "tv") => {
+    const handleTypeSelect = (type: "movie" | "tv" | "person") => {
         setMediaType(type);
         setShowTypeDropdown(false);
+        if (type !== "person") {
+            setSelectedActor(null);
+        }
 
         // If on an active search results page, update the type in the URL
         const activeMood = searchParams.get("mood");
         const activeQ = searchParams.get("q");
         if (activeMood) {
-            router.push(`/?mood=${encodeURIComponent(activeMood)}&type=${type}`);
+            if (type === "person" && selectedActor) {
+                router.push(
+                    `/?mood=${encodeURIComponent(activeMood)}&type=person&actorId=${selectedActor.id}&actorName=${encodeURIComponent(
+                        selectedActor.name
+                    )}`
+                );
+            } else {
+                router.push(`/?mood=${encodeURIComponent(activeMood)}&type=${type}`);
+            }
         } else if (activeQ) {
             router.push(`/?q=${encodeURIComponent(activeQ)}&type=${type}`);
         }
     };
 
     useEffect(() => {
-        if (isAIMode || !showSuggestions || query.trim().length < 1) {
+        const isActorSearchPhase = mediaType === "person" && (!isAIMode || !selectedActor);
+        const shouldFetch = (isActorSearchPhase || !isAIMode) && showSuggestions && query.trim().length >= 1;
+
+        if (!shouldFetch) {
             setSuggestions([]);
+            setActorSuggestions([]);
             return;
         }
 
         const fetchSuggestions = async () => {
             setIsLoading(true);
             try {
-                const results = await searchMultiAction(query);
-                const items = mediaType === "tv"
-                    ? results.tv
-                    : mediaType === "movie"
-                    ? results.movies
-                    : [...results.movies, ...results.tv];
-                const combined = items
-                    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
-                    .slice(0, 5);
-                setSuggestions(combined);
+                if (mediaType === "person") {
+                    const people = await searchPeopleAction(query);
+                    setActorSuggestions((people || []).slice(0, 5));
+                    setSuggestions([]);
+                } else {
+                    const results = await searchMultiAction(query);
+                    const items =
+                        mediaType === "tv"
+                            ? results.tv
+                            : mediaType === "movie"
+                            ? results.movies
+                            : [...results.movies, ...results.tv];
+                    const combined = items
+                        .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+                        .slice(0, 5);
+                    setSuggestions(combined);
+                    setActorSuggestions([]);
+                }
             } catch (error) {
                 console.error("Suggestions error:", error);
             } finally {
@@ -114,7 +202,7 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
 
         const timer = setTimeout(fetchSuggestions, 300);
         return () => clearTimeout(timer);
-    }, [query, showSuggestions, isAIMode, mediaType]);
+    }, [query, showSuggestions, isAIMode, mediaType, selectedActor]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -127,6 +215,20 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
+
+    const placeholderText = isAIMode
+        ? mediaType === "person"
+            ? selectedActor
+                ? "Describe movie/series vibe or plot (e.g. mind-bending sci-fi)..."
+                : "Type actor or actress name..."
+            : mediaType === "tv"
+            ? "Describe TV series mood or theme (e.g. cozy sci-fi)..."
+            : "Describe movie mood or theme (e.g. mind-bending thriller)..."
+        : mediaType === "person"
+        ? "Search actors and actresses..."
+        : mediaType === "tv"
+        ? "Search TV series by title..."
+        : "Search movies by title...";
 
     return (
         <div ref={containerRef} className={cn("relative w-full max-w-3xl mx-auto", className)}>
@@ -144,7 +246,7 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                     <button
                         type="button"
                         onClick={() => {
-                            setShowTypeDropdown(prev => !prev);
+                            setShowTypeDropdown((prev) => !prev);
                             setShowSuggestions(false);
                         }}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 backdrop-blur-md text-xs sm:text-sm font-medium text-white transition-all"
@@ -153,11 +255,20 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                     >
                         {mediaType === "tv" ? (
                             <Tv className="h-3.5 w-3.5 text-blue-400" />
+                        ) : mediaType === "person" ? (
+                            <User className="h-3.5 w-3.5 text-purple-400" />
                         ) : (
                             <Film className="h-3.5 w-3.5 text-amber-400" />
                         )}
-                        <span className="font-semibold">{mediaType === "tv" ? "Series" : "Movie"}</span>
-                        <ChevronDown className={cn("h-3.5 w-3.5 text-gray-400 transition-transform duration-200", showTypeDropdown && "rotate-180")} />
+                        <span className="font-semibold">
+                            {mediaType === "tv" ? "Series" : mediaType === "person" ? "Actor" : "Movie"}
+                        </span>
+                        <ChevronDown
+                            className={cn(
+                                "h-3.5 w-3.5 text-gray-400 transition-transform duration-200",
+                                showTypeDropdown && "rotate-180"
+                            )}
+                        />
                     </button>
 
                     {showTypeDropdown && (
@@ -194,12 +305,62 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                                 </span>
                                 {mediaType === "tv" && <Check className="h-3.5 w-3.5 text-blue-400 flex-shrink-0" />}
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => handleTypeSelect("person")}
+                                className={cn(
+                                    "w-full flex items-center justify-between px-2 py-2 text-xs sm:text-sm text-left rounded-xl transition-all mt-0.5",
+                                    mediaType === "person"
+                                        ? "bg-white/15 text-white font-semibold border border-white/10 shadow-sm"
+                                        : "text-white/80 hover:bg-white/10 hover:text-white"
+                                )}
+                            >
+                                <span className="flex items-center gap-2">
+                                    <User className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" />
+                                    <span>Actor</span>
+                                </span>
+                                {mediaType === "person" && <Check className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" />}
+                            </button>
                         </div>
                     )}
                 </div>
 
                 {/* Subtle Divider */}
                 <div className="h-6 w-px bg-white/15 mx-1 flex-shrink-0" />
+
+                {/* Interactive Actor Chip in AI Mode */}
+                {isAIMode && mediaType === "person" && selectedActor && (
+                    <div className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 ml-1 rounded-full bg-purple-500/25 border border-purple-400/40 text-purple-200 text-xs sm:text-sm font-medium flex-shrink-0 shadow-sm animate-in fade-in zoom-in-95 duration-150">
+                        <div className="relative w-5 h-5 rounded-full overflow-hidden bg-black/40 flex-shrink-0">
+                            {selectedActor.profile_path ? (
+                                <Image
+                                    src={TMDB_IMAGE_URL.profile(selectedActor.profile_path)}
+                                    alt={selectedActor.name}
+                                    fill
+                                    className="object-cover"
+                                    sizes="20px"
+                                />
+                            ) : (
+                                <User className="w-3.5 h-3.5 text-purple-300 m-auto mt-0.5" />
+                            )}
+                        </div>
+                        <span className="truncate max-w-[100px] sm:max-w-[150px] font-semibold text-white">
+                            {selectedActor.name}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedActor(null);
+                                inputRef.current?.focus();
+                            }}
+                            className="p-0.5 rounded-full hover:bg-white/20 text-purple-200 hover:text-white transition-colors"
+                            title="Remove actor"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                )}
 
                 {/* Search Input */}
                 <div className="relative flex-1 flex items-center min-w-0">
@@ -209,20 +370,14 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                         value={query}
                         onChange={(e) => {
                             setQuery(e.target.value);
-                            if (!isAIMode) setShowSuggestions(true);
+                            const isActorSearchPhase = mediaType === "person" && (!isAIMode || !selectedActor);
+                            if (!isAIMode || isActorSearchPhase) setShowSuggestions(true);
                         }}
                         onFocus={() => {
-                            if (!isAIMode) setShowSuggestions(true);
+                            const isActorSearchPhase = mediaType === "person" && (!isAIMode || !selectedActor);
+                            if (!isAIMode || isActorSearchPhase) setShowSuggestions(true);
                         }}
-                        placeholder={
-                            isAIMode
-                                ? (mediaType === "tv"
-                                    ? "Describe TV series mood or theme (e.g. cozy sci-fi)..."
-                                    : "Describe movie mood or theme (e.g. mind-bending thriller)...")
-                                : (mediaType === "tv"
-                                    ? "Search TV series by title..."
-                                    : "Search movies by title...")
-                        }
+                        placeholder={placeholderText}
                         className="w-full h-full px-2.5 sm:px-3 py-2 bg-transparent text-white placeholder:text-gray-400 text-xs sm:text-sm md:text-base focus:outline-none"
                     />
                 </div>
@@ -233,11 +388,15 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                     <button
                         type="button"
                         onClick={() => {
-                            setIsAIMode(prev => !prev);
+                            setIsAIMode((prev) => !prev);
                             setShowSuggestions(false);
                             inputRef.current?.focus();
                         }}
-                        title={isAIMode ? "AI Search active. Click to switch to normal title search" : "Switch to AI Search (find by mood & theme)"}
+                        title={
+                            isAIMode
+                                ? "AI Search active. Click to switch to normal title search"
+                                : "Switch to AI Search (find by mood & theme)"
+                        }
                         className={cn(
                             "flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 select-none",
                             isAIMode
@@ -247,10 +406,12 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                     >
                         <Bot className={cn("h-3.5 w-3.5", isAIMode ? "text-white" : "text-gray-400")} />
                         <span className="hidden xs:inline">AI</span>
-                        <span className={cn(
-                            "text-[10px] uppercase tracking-wider px-1 py-0.5 rounded font-bold leading-none",
-                            isAIMode ? "bg-white/20 text-white" : "bg-white/5 text-gray-500"
-                        )}>
+                        <span
+                            className={cn(
+                                "text-[10px] uppercase tracking-wider px-1 py-0.5 rounded font-bold leading-none",
+                                isAIMode ? "bg-white/20 text-white" : "bg-white/5 text-gray-500"
+                            )}
+                        >
                             {isAIMode ? "ON" : "OFF"}
                         </span>
                     </button>
@@ -258,14 +419,110 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                     {/* Hidden submit button to allow Enter key to submit form */}
                     <button type="submit" className="hidden" aria-hidden="true" tabIndex={-1} disabled={searchLoading} />
 
-                    {searchLoading && (
-                        <Loader2 className="h-4 w-4 text-gray-400 animate-spin mr-1" />
-                    )}
+                    {searchLoading && <Loader2 className="h-4 w-4 text-gray-400 animate-spin mr-1" />}
                 </div>
             </form>
 
-            {/* Suggestions Dropdown (Normal Search Mode) */}
-            {!isAIMode && showSuggestions && suggestions.length > 0 && (
+            {/* Suggestions Dropdown: Actor Suggestions (AI Mode Actor Phase OR Normal Actor Mode) */}
+            {showSuggestions && actorSuggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 py-2 bg-[#0b0b12]/95 backdrop-blur-3xl border border-white/15 rounded-2xl shadow-2xl shadow-black/80 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 text-left">
+                    {actorSuggestions.map((person) => {
+                        const knownForTitles = (person.known_for || [])
+                            .map((k: any) => k.title || k.name)
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .join(", ");
+
+                        if (isAIMode) {
+                            return (
+                                <button
+                                    key={`actor-${person.id}`}
+                                    type="button"
+                                    className="w-full flex items-center gap-4 px-4 py-3 hover:bg-white/5 transition-colors group text-left"
+                                    onClick={() => {
+                                        setSelectedActor({
+                                            id: person.id,
+                                            name: person.name,
+                                            profile_path: person.profile_path,
+                                        });
+                                        setQuery("");
+                                        setShowSuggestions(false);
+                                        setActorSuggestions([]);
+                                        inputRef.current?.focus();
+                                    }}
+                                >
+                                    <div className="relative w-10 h-10 flex-shrink-0 rounded-full overflow-hidden bg-black/20 ring-1 ring-white/10">
+                                        {person.profile_path ? (
+                                            <Image
+                                                src={TMDB_IMAGE_URL.profile(person.profile_path)}
+                                                alt={person.name}
+                                                fill
+                                                className="object-cover"
+                                                sizes="40px"
+                                            />
+                                        ) : (
+                                            <div className="flex items-center justify-center h-full text-xs text-gray-500">
+                                                <User className="h-5 w-5 text-gray-400" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0 text-left">
+                                        <h4 className="text-sm font-medium text-white truncate group-hover:text-purple-400 transition-colors">
+                                            {person.name}
+                                        </h4>
+                                        <p className="text-[11px] text-gray-400 truncate">
+                                            {person.known_for_department || "Actor"}
+                                            {knownForTitles ? ` • Known for: ${knownForTitles}` : ""}
+                                        </p>
+                                    </div>
+                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                        Select
+                                    </span>
+                                </button>
+                            );
+                        }
+
+                        return (
+                            <Link
+                                key={`actor-${person.id}`}
+                                href={`/person/${person.id}`}
+                                prefetch={false}
+                                className="flex items-center gap-4 px-4 py-3 hover:bg-white/5 transition-colors group text-left"
+                                onClick={() => setShowSuggestions(false)}
+                            >
+                                <div className="relative w-10 h-10 flex-shrink-0 rounded-full overflow-hidden bg-black/20 ring-1 ring-white/10">
+                                    {person.profile_path ? (
+                                        <Image
+                                            src={TMDB_IMAGE_URL.profile(person.profile_path)}
+                                            alt={person.name}
+                                            fill
+                                            className="object-cover"
+                                            sizes="40px"
+                                        />
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-xs text-gray-500">
+                                            <User className="h-5 w-5 text-gray-400" />
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0 text-left">
+                                    <h4 className="text-sm font-medium text-white truncate group-hover:text-blue-400 transition-colors">
+                                        {person.name}
+                                    </h4>
+                                    <p className="text-[11px] text-gray-400 truncate">
+                                        {person.known_for_department || "Actor"}
+                                        {knownForTitles ? ` • Known for: ${knownForTitles}` : ""}
+                                    </p>
+                                </div>
+                                <Play className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </Link>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Suggestions Dropdown (Normal Movie / TV Search Mode) */}
+            {!isAIMode && mediaType !== "person" && showSuggestions && suggestions.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-2 py-2 bg-[#0b0b12]/95 backdrop-blur-3xl border border-white/15 rounded-2xl shadow-2xl shadow-black/80 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 text-left">
                     {suggestions.map((item) => (
                         <Link
@@ -297,7 +554,9 @@ export function SearchBar({ onSearch, searchLoading, className }: SearchBarProps
                                         {item.media_type}
                                     </span>
                                     <span className="text-[10px] text-gray-500">
-                                        {item.media_type === "movie" ? (item as Movie).release_date?.split("-")[0] : (item as TVSeries).first_air_date?.split("-")[0]}
+                                        {item.media_type === "movie"
+                                            ? (item as Movie).release_date?.split("-")[0]
+                                            : (item as TVSeries).first_air_date?.split("-")[0]}
                                     </span>
                                 </div>
                             </div>

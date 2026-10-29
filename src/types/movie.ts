@@ -54,6 +54,17 @@ export interface Cast {
     name: string;
     character: string;
     profile_path: string | null;
+    total_episode_count?: number;
+    order?: number;
+}
+
+export interface CrewMember {
+    id: number;
+    name: string;
+    job: string;
+    department: string;
+    profile_path: string | null;
+    priority?: number;
 }
 
 export interface Video {
@@ -127,6 +138,7 @@ export interface MovieDetails extends Movie {
     runtime: number;
     tagline: string;
     cast: Cast[];
+    crew?: CrewMember[];
     imdb_id?: string;
     videos: { results: Video[] };
     watch_providers?: WatchProviders;
@@ -139,6 +151,7 @@ export interface TVDetails extends TVSeries {
     number_of_seasons: number;
     tagline: string;
     cast: Cast[];
+    crew?: CrewMember[];
     imdb_id?: string;
     videos: { results: Video[] };
     seasons: Season[];

@@ -1,11 +1,11 @@
 "use server";
 
 import { movieService, tvService } from "@/lib/tmdb";
-import { AIRateLimitInfo, getMovieInsights, isAIRateLimitError } from "@/lib/ai";
+import { AIRateLimitInfo, getMovieInsights, getActorRecommendations, isAIRateLimitError, type ActorAIRecommendationsResult } from "@/lib/ai";
 import { getExternalRatings } from "@/lib/omdb";
 import type { ExternalRatings } from "@/lib/omdb";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { Movie, TVSeries } from "@/types/movie";
+import { Movie, TVSeries, Cast, CrewMember } from "@/types/movie";
 
 type AIActionResult<T> = {
     data: T;
@@ -96,4 +96,79 @@ export async function getMediaVerdictAction(
         return { data: null };
     }
 }
+
+export async function searchPeopleAction(query: string) {
+    const clientIp = await getClientIp();
+    const rate = checkRateLimit(`search-people:${clientIp}`, 30, 60 * 1000);
+    if (!rate.allowed) {
+        return [];
+    }
+
+    try {
+        return await movieService.searchPeople(query);
+    } catch (error) {
+        console.error("Failed to search people:", error);
+        return [];
+    }
+}
+
+export async function getActorAIRecommendationsAction(
+    actorId: number,
+    actorName: string,
+    mood: string,
+    existingCredits?: any[],
+    existingPerson?: any
+): Promise<ActorAIRecommendationsResult> {
+    const clientIp = await getClientIp();
+    const rate = checkRateLimit(`actor-ai:${clientIp}`, 20, 60 * 1000);
+    if (!rate.allowed) {
+        return {
+            actorMatches: [],
+            allCredits: [],
+            disclaimer: "Too many requests. Please wait a moment.",
+            rateLimit: {
+                limit: 20,
+                count: 20,
+                retryAfterSeconds: rate.retryAfterSeconds,
+                resetAt: rate.resetAt,
+            },
+        };
+    }
+
+    try {
+        return await getActorRecommendations(actorId, actorName, mood, undefined, existingCredits, existingPerson);
+    } catch (error) {
+        if (isAIRateLimitError(error)) {
+            return {
+                actorMatches: [],
+                allCredits: [],
+                rateLimit: error.rateLimit,
+            };
+        }
+        console.error("Failed to get actor AI recommendations:", error);
+        return { actorMatches: [], allCredits: [] };
+    }
+}
+
+export async function getTVSeasonCreditsAction(tvId: number, seasonNumber: number): Promise<Cast[]> {
+    if (!Number.isFinite(tvId) || !Number.isFinite(seasonNumber)) return [];
+    try {
+        return await tvService.getTVSeasonCredits(tvId, seasonNumber);
+    } catch (error) {
+        console.error(`Failed to fetch season ${seasonNumber} credits for TV ${tvId}:`, error);
+        return [];
+    }
+}
+
+export async function getMovieCreditsAction(movieId: number): Promise<{ cast: Cast[]; crew: CrewMember[] }> {
+    if (!Number.isFinite(movieId)) return { cast: [], crew: [] };
+    try {
+        return await movieService.getMovieCredits(movieId);
+    } catch (error) {
+        console.error(`Failed to fetch credits for movie ${movieId}:`, error);
+        return { cast: [], crew: [] };
+    }
+}
+
+
 

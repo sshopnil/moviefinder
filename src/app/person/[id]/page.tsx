@@ -1,6 +1,7 @@
 
 import type { Metadata } from "next";
 import { movieService, TMDB_IMAGE_URL } from "@/lib/tmdb";
+import { getActorRecommendations } from "@/lib/ai";
 import { MovieBrowser } from "@/components/movie-browser";
 import { BackButton } from "@/components/back-button";
 import { MapPin, Calendar, Star, Instagram } from "lucide-react";
@@ -13,6 +14,7 @@ export const revalidate = 86400;
 
 type Props = {
     params: Promise<{ id: string }>;
+    searchParams: Promise<{ mood?: string }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -45,15 +47,39 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 }
 
-export default async function PersonPage({ params }: Props) {
+export default async function PersonPage({ params, searchParams }: Props) {
     const { id } = await params;
+    const { mood } = await searchParams;
     if (!id) return notFound();
+    const personId = parseInt(id, 10);
+    if (!Number.isFinite(personId)) return notFound();
 
     try {
         const [person, credits] = await Promise.all([
-            movieService.getPersonDetails(parseInt(id)),
-            movieService.getPersonCredits(parseInt(id)),
+            movieService.getPersonDetails(personId).catch(() => null),
+            movieService.getPersonCombinedCredits(personId).catch(() => []),
         ]);
+
+        if (!person) return notFound();
+
+        let initialAIMatches: any[] = [];
+        let initialDisclaimer: string | undefined;
+        if (mood && mood.trim()) {
+            try {
+                const aiResult = await getActorRecommendations(
+                    personId,
+                    person.name,
+                    mood.trim(),
+                    undefined,
+                    credits,
+                    person
+                );
+                initialAIMatches = aiResult?.actorMatches || [];
+                initialDisclaimer = aiResult?.disclaimer;
+            } catch (err) {
+                console.error("Failed to load initial actor AI recommendations:", err);
+            }
+        }
 
         return (
             <div className="min-h-screen relative pb-20">
@@ -133,7 +159,17 @@ export default async function PersonPage({ params }: Props) {
                     </div>
 
                     <div className="mt-8">
-                        <MovieBrowser movies={credits} title="Known For" description="Browsing all movies" />
+                        <MovieBrowser
+                            movies={credits}
+                            title="Known For"
+                            description="Browsing all filmography"
+                            actorId={personId}
+                            actorName={person.name}
+                            actorPerson={person}
+                            initialMood={mood}
+                            initialAIMatches={initialAIMatches}
+                            initialDisclaimer={initialDisclaimer}
+                        />
                     </div>
                 </div>
             </div>

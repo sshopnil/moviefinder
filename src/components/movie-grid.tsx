@@ -30,21 +30,24 @@ export function MovieGrid({ movies, title, pendingCount = 0 }: MovieGridProps) {
                     }`}
             >
                 <AnimatePresence>
-                    {movies.map((movie) => (
-                        <motion.div
-                            key={movie.id}
-                            initial={{ opacity: 0, scale: 0.96 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.96 }}
-                            transition={{ duration: 0.2 }}
-                        >
-                            {movie.aiMeta ? (
-                                <AIRecommendationCard movie={movie} />
-                            ) : (
-                                <MovieCard movie={movie} />
-                            )}
-                        </motion.div>
-                    ))}
+                    {movies.map((movie, index) => {
+                        const mediaType = movie.media_type || ('name' in movie ? 'tv' : 'movie');
+                        return (
+                            <motion.div
+                                key={`${mediaType}-${movie.id}-${index}`}
+                                initial={{ opacity: 0, scale: 0.96 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.96 }}
+                                transition={{ duration: 0.2 }}
+                            >
+                                {movie.aiMeta ? (
+                                    <AIRecommendationCard movie={movie} />
+                                ) : (
+                                    <MovieCard movie={movie} />
+                                )}
+                            </motion.div>
+                        );
+                    })}
                     {Array.from({ length: pendingCount }, (_, item) => (
                         <motion.div key={`pending-${item}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                             <AIRecommendationCardSkeleton />
